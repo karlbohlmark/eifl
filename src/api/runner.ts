@@ -96,7 +96,8 @@ export function handlePollForJob(runner: Runner): Response {
   const pipelineConfig = JSON.parse(pipeline.config);
 
   // Construct repo URL (assumes server URL is known by runner)
-  const repoUrl = `/git/${repo.path}`;
+  // If remote_url is present, use that instead of local git server
+  const repoUrl = repo.remote_url || `/git/${repo.path}`;
 
   const job: JobPayload = {
     run,

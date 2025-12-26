@@ -32,6 +32,7 @@ function initSchema(db: Database) {
       project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
       name TEXT NOT NULL,
       path TEXT NOT NULL UNIQUE,
+      remote_url TEXT,
       default_branch TEXT DEFAULT 'main',
       created_at TEXT DEFAULT (datetime('now')),
       UNIQUE(project_id, name)
@@ -96,6 +97,19 @@ function initSchema(db: Database) {
     CREATE INDEX IF NOT EXISTS idx_metrics_run ON metrics(run_id);
     CREATE INDEX IF NOT EXISTS idx_metrics_key ON metrics(key);
   `);
+
+  // Migrations
+  try {
+    // Check if remote_url column exists
+    db.prepare("SELECT remote_url FROM repos LIMIT 1").get();
+  } catch (error) {
+    console.log("Migrating database: adding remote_url to repos table");
+    try {
+      db.exec("ALTER TABLE repos ADD COLUMN remote_url TEXT");
+    } catch (e) {
+      console.error("Migration failed:", e);
+    }
+  }
 }
 
 // Types
@@ -111,6 +125,7 @@ export interface Repo {
   project_id: number;
   name: string;
   path: string;
+  remote_url: string | null;
   default_branch: string;
   created_at: string;
 }

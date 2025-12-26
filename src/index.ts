@@ -44,6 +44,7 @@ import {
   handleRunComplete,
   handleRunnerHeartbeat,
 } from "./api/runner";
+import { handleGithubWebhook } from "./api/github";
 
 // Initialize database on startup
 getDb();
@@ -69,6 +70,11 @@ const server = serve({
     // Git HTTP protocol
     if (path.startsWith("/git/")) {
       return handleGitRequest(req, path.slice(5));
+    }
+
+    // Github Webhook
+    if (path === "/api/webhooks/github" && method === "POST") {
+      return handleGithubWebhook(req);
     }
 
     // API routes
