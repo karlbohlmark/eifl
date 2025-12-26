@@ -42,7 +42,9 @@ export async function executeJob(
     await $`mkdir -p ${workDir}`.quiet();
 
     // Clone the repository
-    const gitUrl = `${serverUrl}${job.repoUrl}`;
+    // Check if repoUrl is absolute (starts with http or git@), otherwise append serverUrl
+    const isAbsolute = job.repoUrl.startsWith("http") || job.repoUrl.startsWith("git@");
+    const gitUrl = isAbsolute ? job.repoUrl : `${serverUrl}${job.repoUrl}`;
     console.log(`Cloning ${gitUrl}...`);
 
     const cloneResult = await $`git clone ${gitUrl} ${workDir}`.quiet();

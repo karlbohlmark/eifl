@@ -29,10 +29,10 @@ export function deleteProject(id: number): boolean {
 }
 
 // Repos
-export function createRepo(projectId: number, name: string, path: string): Repo {
+export function createRepo(projectId: number, name: string, path: string, remoteUrl?: string): Repo {
   const db = getDb();
-  const stmt = db.prepare("INSERT INTO repos (project_id, name, path) VALUES (?, ?, ?) RETURNING *");
-  return stmt.get(projectId, name, path) as Repo;
+  const stmt = db.prepare("INSERT INTO repos (project_id, name, path, remote_url) VALUES (?, ?, ?, ?) RETURNING *");
+  return stmt.get(projectId, name, path, remoteUrl || null) as Repo;
 }
 
 export function getRepos(projectId: number): Repo[] {
@@ -48,6 +48,11 @@ export function getRepo(id: number): Repo | null {
 export function getRepoByPath(path: string): Repo | null {
   const db = getDb();
   return db.query("SELECT * FROM repos WHERE path = ?").get(path) as Repo | null;
+}
+
+export function getRepoByRemoteUrl(url: string): Repo | null {
+  const db = getDb();
+  return db.query("SELECT * FROM repos WHERE remote_url = ?").get(url) as Repo | null;
 }
 
 export function deleteRepo(id: number): boolean {
