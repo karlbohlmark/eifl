@@ -111,7 +111,15 @@ export function handlePollForJob(runner: Runner): Response {
 
   // If using GitHub and token is available, inject it into the URL for authentication
   if (repoUrl.startsWith("https://github.com/") && process.env.GITHUB_TOKEN) {
-    repoUrl = repoUrl.replace("https://github.com/", `https://oauth2:${process.env.GITHUB_TOKEN}@github.com/`);
+    try {
+      const githubUrl = new URL(repoUrl);
+      githubUrl.username = "oauth2";
+      githubUrl.password = process.env.GITHUB_TOKEN;
+      repoUrl = githubUrl.toString();
+    } catch (e) {
+      console.error("Failed to construct GitHub URL with token:", e);
+      // Fallback: leave repoUrl unchanged if URL construction fails
+    }
   }
 
   const job: JobPayload = {
