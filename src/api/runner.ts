@@ -98,7 +98,7 @@ export function handlePollForJob(runner: Runner): Response {
       // We already fetched pipeline and repo above
       const publicUrl = process.env.EIFL_PUBLIC_URL || "http://localhost:3000";
       const runUrl = `${publicUrl}/pipeline/${pipeline.id}`;
-      updateCommitStatus(repo, run.commit_sha, "pending", runUrl, "Build running...")
+      updateCommitStatus(repo, run.commit_sha, "pending", runUrl, "Build running...", "Eifl CI/build")
         .catch(e => console.error("Failed to set running status:", e));
   }
 
@@ -111,7 +111,15 @@ export function handlePollForJob(runner: Runner): Response {
 
   // If using GitHub and token is available, inject it into the URL for authentication
   if (repoUrl.startsWith("https://github.com/") && process.env.GITHUB_TOKEN) {
-    repoUrl = repoUrl.replace("https://github.com/", `https://oauth2:${process.env.GITHUB_TOKEN}@github.com/`);
+    try {
+      const githubUrl = new URL(repoUrl);
+      githubUrl.username = "oauth2";
+      githubUrl.password = process.env.GITHUB_TOKEN;
+      repoUrl = githubUrl.toString();
+    } catch (e) {
+      console.error("Failed to construct GitHub URL with token:", e);
+      // Fallback: leave repoUrl unchanged if URL construction fails
+    }
   }
 
   const job: JobPayload = {
@@ -186,14 +194,21 @@ export async function handleRunComplete(runner: Runner, req: Request): Promise<R
       if (pipeline) {
         const repo = getRepo(pipeline.repo_id);
         if (repo) {
-            const publicUrl = process.env.EIFL_PUBLIC_URL || "http://localhost:3000"; // Should be configured
-            const runUrl = `${publicUrl}/pipeline/${pipeline.id}`;
-            const description = body.status === "success" ? "Build passed" : "Build failed";
-            const state = body.status === "success" ? "success" : "failure";
+            const publicUrl =
+              process.env.EIFL_PUBLIC_URL ??
+              process.env.VERCEL_URL;
 
-            // Fire and forget
-            updateCommitStatus(repo, run.commit_sha, state, runUrl, description)
-                .catch(err => console.error("Failed to update status on complete:", err));
+            if (!publicUrl) {
+              console.error("Public URL is not configured. Set EIFL_PUBLIC_URL or VERCEL_URL to enable commit status links.");
+            } else {
+              const runUrl = `${publicUrl}/pipeline/${pipeline.id}`;
+              const description = body.status === "success" ? "Build passed" : "Build failed";
+              const state = body.status === "success" ? "success" : "failure";
+
+              // Fire and forget
+              updateCommitStatus(repo, run.commit_sha, state, runUrl, description)
+                  .catch(err => console.error("Failed to update status on complete:", err));
+            }
         }
       }
     }
