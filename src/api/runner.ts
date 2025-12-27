@@ -17,6 +17,7 @@ import {
   getRepo,
 } from "../db/queries";
 import { updateCommitStatus } from "../lib/github";
+import { getPipelineUrl } from "../lib/utils";
 import type { Run, Step, Runner } from "../db/schema";
 
 // Runner management
@@ -96,8 +97,7 @@ export function handlePollForJob(runner: Runner): Response {
   // Update GitHub status to pending/running
   if (run.commit_sha) {
       // We already fetched pipeline and repo above
-      const publicUrl = process.env.EIFL_PUBLIC_URL || "http://localhost:3000";
-      const runUrl = `${publicUrl}/pipeline/${pipeline.id}`;
+      const runUrl = getPipelineUrl(pipeline.id);
       updateCommitStatus(repo, run.commit_sha, "pending", runUrl, "Build running...")
         .catch(e => console.error("Failed to set running status:", e));
   }
@@ -186,8 +186,7 @@ export async function handleRunComplete(runner: Runner, req: Request): Promise<R
       if (pipeline) {
         const repo = getRepo(pipeline.repo_id);
         if (repo) {
-            const publicUrl = process.env.EIFL_PUBLIC_URL || "http://localhost:3000"; // Should be configured
-            const runUrl = `${publicUrl}/pipeline/${pipeline.id}`;
+            const runUrl = getPipelineUrl(pipeline.id);
             const description = body.status === "success" ? "Build passed" : "Build failed";
             const state = body.status === "success" ? "success" : "failure";
 
