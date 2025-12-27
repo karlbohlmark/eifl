@@ -72,7 +72,7 @@ const server = serve({
       return handleGitRequest(req, path.slice(5));
     }
 
-    // Github Webhook
+    // GitHub Webhook
     if (path === "/api/webhooks/github" && method === "POST") {
       return handleGithubWebhook(req);
     }

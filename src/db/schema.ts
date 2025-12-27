@@ -100,15 +100,16 @@ function initSchema(db: Database) {
 
   // Migrations
   try {
-    // Check if remote_url column exists
-    db.prepare("SELECT remote_url FROM repos LIMIT 1").get();
-  } catch (error) {
-    console.log("Migrating database: adding remote_url to repos table");
-    try {
+    // Check if remote_url column exists using table schema, not by querying data
+    const repoTableInfo = db.prepare("PRAGMA table_info(repos);").all() as { name: string }[];
+    const hasRemoteUrlColumn = repoTableInfo.some((column) => column.name === "remote_url");
+
+    if (!hasRemoteUrlColumn) {
+      console.log("Migrating database: adding remote_url to repos table");
       db.exec("ALTER TABLE repos ADD COLUMN remote_url TEXT");
-    } catch (e) {
-      console.error("Migration failed:", e);
     }
+  } catch (error) {
+    console.error("Migration check failed:", error);
   }
 }
 
