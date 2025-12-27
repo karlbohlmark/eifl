@@ -55,23 +55,34 @@ export async function handleGithubWebhook(req: Request): Promise<Response> {
     return new Response("Ignored event", { status: 200 });
   }
 
-  // Validate payload fields
+  // Validate payload structure
   if (!payload || typeof payload !== "object") {
     return new Response("Invalid payload", { status: 400 });
   }
 
-  const repository = payload.repository;
-  if (!repository || typeof repository !== "object") {
-    return new Response("Missing repository in payload", { status: 400 });
+  if (!payload.repository || typeof payload.repository !== "object") {
+    return new Response("Invalid payload: missing repository", { status: 400 });
   }
 
-  const repoUrl = repository.clone_url;
-  const repoName = repository.name;
+  const repoUrl = payload.repository.clone_url;
+  const repoName = payload.repository.name;
+  const fullName = payload.repository.full_name;
   const ref = payload.ref; // refs/heads/main
   const after = payload.after; // commit sha
 
-  if (!repoUrl || !repoName || !ref || !after) {
-    return new Response("Invalid payload: missing required fields", { status: 400 });
+  // Validate all required fields are present
+  const missingFields = [];
+  if (!repoUrl) missingFields.push("repository.clone_url");
+  if (!repoName) missingFields.push("repository.name");
+  if (!fullName) missingFields.push("repository.full_name");
+  if (!ref) missingFields.push("ref");
+  if (!after) missingFields.push("after");
+
+  if (missingFields.length > 0) {
+    return new Response(
+      `Invalid payload: missing required field(s): ${missingFields.join(", ")}`,
+      { status: 400 }
+    );
   }
 
   // Find repo by remote URL
@@ -88,7 +99,6 @@ export async function handleGithubWebhook(req: Request): Promise<Response> {
 
   // Fetch .eifl.json from GitHub
   // Construct raw URL: https://raw.githubusercontent.com/{owner}/{repo}/{sha}/.eifl.json
-  const fullName = payload.repository.full_name;
   const configUrl = `https://raw.githubusercontent.com/${fullName}/${after}/.eifl.json`;
 
   // Support private repos via GITHUB_TOKEN
