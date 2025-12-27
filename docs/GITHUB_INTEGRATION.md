@@ -2,7 +2,10 @@
 To integrate Eifl with your GitHub repositories, follow these steps:
 
 ## 1. Configure Eifl Server
-Ensure your Eifl server is reachable from the internet (e.g., using a tunnel like ngrok or hosting it on a public IP).
+Ensure your Eifl server is reachable by GitHub (for example, via a tunnel like ngrok or by hosting it on a public IP) **only from a protected environment** (such as behind a VPN, firewall, or authenticated reverse proxy).
+
+**Security warning:** Do **not** expose your Eifl server directly to the public internet without additional authentication and access control. The Eifl API can create and trigger projects, repositories, and pipelines; if it is reachable without protection, an attacker could remotely run arbitrary CI jobs and commands on your runners.
+
 Set the following environment variable on your Eifl server:
 - `GITHUB_WEBHOOK_SECRET`: A secret string used to secure webhooks.
 
