@@ -19,6 +19,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
+import { formatRelativeTime } from "../lib/utils";
 
 interface Pipeline {
   id: number;
@@ -339,8 +340,7 @@ export function PipelineView() {
                   )}
                   {selectedRun.started_at && (
                     <span className="ml-4">
-                      Started:{" "}
-                      {new Date(selectedRun.started_at).toLocaleString()}
+                      Started: {formatRelativeTime(selectedRun.started_at)}
                     </span>
                   )}
                 </div>
@@ -358,9 +358,11 @@ export function PipelineView() {
                         )}
                       </div>
                       {step.output && (
-                        <pre className="p-3 text-xs overflow-x-auto bg-black text-green-400 max-h-64 overflow-y-auto">
-                          {step.output}
-                        </pre>
+                        <div className="bg-black rounded-b-lg">
+                          <pre className="p-4 text-xs font-mono overflow-x-auto text-green-400 max-h-[500px] overflow-y-auto leading-relaxed scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
+                            {step.output}
+                          </pre>
+                        </div>
                       )}
                     </div>
                   ))}

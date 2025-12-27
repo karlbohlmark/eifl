@@ -3,7 +3,8 @@ import { useParams, Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, GitBranch, ArrowLeft } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Plus, GitBranch, ArrowLeft, Copy, Check } from "lucide-react";
 
 interface Project {
   id: number;
@@ -27,6 +28,7 @@ export function Project() {
   const [newRepoName, setNewRepoName] = useState("");
   const [showNewRepo, setShowNewRepo] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchProject();
@@ -72,10 +74,26 @@ export function Project() {
     }
   }
 
+  const copyToClipboard = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
   if (loading) {
     return (
       <div className="container mx-auto p-8">
-        <p className="text-muted-foreground">Loading...</p>
+        <div className="mb-6">
+          <Skeleton className="h-4 w-32" />
+        </div>
+        <div className="flex justify-between items-center mb-8">
+          <Skeleton className="h-10 w-48" />
+          <Skeleton className="h-10 w-32" />
+        </div>
+        <div className="grid gap-4">
+          <Skeleton className="h-32 w-full" />
+          <Skeleton className="h-32 w-full" />
+        </div>
       </div>
     );
   }
@@ -123,9 +141,19 @@ export function Project() {
                 Cancel
               </Button>
             </div>
-            <p className="text-sm text-muted-foreground mt-2">
-              Clone URL: <code>http://localhost:3000/git/{project.name}/[repo-name].git</code>
-            </p>
+            <div className="flex items-center gap-2 mt-2">
+              <p className="text-sm text-muted-foreground">
+                Clone URL: <code>http://localhost:3000/git/{project.name}/[repo-name].git</code>
+              </p>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                onClick={() => copyToClipboard(`http://localhost:3000/git/${project.name}/[repo-name].git`, 'new-repo-template')}
+              >
+                {copiedId === 'new-repo-template' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+              </Button>
+            </div>
           </CardContent>
         </Card>
       )}
@@ -152,9 +180,19 @@ export function Project() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-0">
-                <p className="text-sm text-muted-foreground font-mono">
-                  git clone http://localhost:3000/git/{repo.path}
-                </p>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm text-muted-foreground font-mono">
+                    git clone http://localhost:3000/git/{repo.path}
+                  </p>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={() => copyToClipboard(`http://localhost:3000/git/${repo.path}`, `repo-${repo.id}`)}
+                  >
+                    {copiedId === `repo-${repo.id}` ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ))}
