@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, GitBranch, Play, CheckCircle, XCircle, Clock } from "lucide-react";
+import { Plus, GitBranch, Trash2 } from "lucide-react";
 
 interface Project {
   id: number;
@@ -26,6 +26,8 @@ export function Dashboard() {
   const [newProjectName, setNewProjectName] = useState("");
   const [showNewProject, setShowNewProject] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     fetchProjects();
@@ -68,6 +70,26 @@ export function Dashboard() {
       }
     } catch (error) {
       console.error("Failed to create project:", error);
+    }
+  }
+
+  async function deleteProject(id: number) {
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/projects/${id}`, {
+        method: "DELETE",
+      });
+
+      if (res.ok) {
+        setConfirmDelete(null);
+        fetchProjects();
+      } else {
+        console.error("Failed to delete project");
+      }
+    } catch (error) {
+      console.error("Failed to delete project:", error);
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -122,13 +144,45 @@ export function Dashboard() {
           {projects.map((project) => (
             <Card key={project.id}>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
+                <CardTitle className="flex items-center justify-between">
                   <Link
                     to={`/project/${project.id}`}
                     className="hover:underline"
                   >
                     {project.name}
                   </Link>
+                  {confirmDelete === project.id ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-normal text-muted-foreground">
+                        Delete project?
+                      </span>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => deleteProject(project.id)}
+                        disabled={deleting}
+                      >
+                        {deleting ? "Deleting..." : "Delete"}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setConfirmDelete(null)}
+                        disabled={deleting}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => setConfirmDelete(project.id)}
+                      title="Delete project"
+                    >
+                      <Trash2 className="w-4 h-4 text-muted-foreground hover:text-destructive" />
+                    </Button>
+                  )}
                 </CardTitle>
               </CardHeader>
               <CardContent>
