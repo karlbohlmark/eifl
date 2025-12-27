@@ -46,9 +46,13 @@ export async function handleGithubWebhook(req: Request): Promise<Response> {
     // Parse JSON after verification since we needed raw text for signature
     payload = JSON.parse(payloadText);
   } else {
-    // If no secret configured, proceed (less secure, maybe warn?)
-    console.warn("GITHUB_WEBHOOK_SECRET not set. Webhook is insecure.");
-    payload = await req.json();
+    // Fail fast when webhook secret is not configured to avoid accepting unsigned requests.
+    console.error(
+      "GITHUB_WEBHOOK_SECRET is not set. Refusing to process insecure GitHub webhook requests."
+    );
+    return new Response("Server misconfiguration: GITHUB_WEBHOOK_SECRET is not set", {
+      status: 500,
+    });
   }
 
   if (event !== "push") {
