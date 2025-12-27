@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, GitBranch, Play, CheckCircle, XCircle, Clock, Trash2 } from "lucide-react";
+import { Plus, GitBranch, Trash2 } from "lucide-react";
 
 interface Project {
   id: number;
