@@ -99,7 +99,7 @@ export async function handleGithubWebhook(req: Request): Promise<Response> {
     // Or we use the API: https://api.github.com/repos/{owner}/{repo}/contents/.eifl.json?ref={sha}
     // But then we need to decode base64.
     // Let's try raw with Authorization header first.
-    headers["Authorization"] = `token ${process.env.GITHUB_TOKEN}`;
+    headers["Authorization"] = `Bearer ${process.env.GITHUB_TOKEN}`;
   }
 
   try {
