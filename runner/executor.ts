@@ -48,7 +48,10 @@ export async function executeJob(
       job.repoUrl.startsWith("https://") ||
       job.repoUrl.startsWith("git@");
     const gitUrl = isAbsolute ? job.repoUrl : `${serverUrl}${job.repoUrl}`;
-    console.log(`Cloning ${gitUrl}...`);
+
+    // Mask token in logs
+    const maskedUrl = gitUrl.replace(/oauth2:[^@]+@/, "oauth2:***@");
+    console.log(`Cloning ${maskedUrl}...`);
 
     const cloneResult = await $`git clone ${gitUrl} ${workDir}`.quiet();
     if (cloneResult.exitCode !== 0) {
