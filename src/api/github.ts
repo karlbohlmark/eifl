@@ -1,6 +1,7 @@
 import { getRepoByRemoteUrl, upsertPipeline, createRun, createStep } from "../db/queries";
 import { validatePipelineConfig, PipelineParseError, shouldTriggerOnPush } from "../pipeline/parser";
 import { updateCommitStatus } from "../lib/github";
+import { getPipelineUrl } from "../lib/utils";
 
 // GitHub webhook payload types
 interface GitHubRepository {
@@ -180,8 +181,8 @@ export async function handleGithubWebhook(req: Request): Promise<Response> {
     console.log(`Triggered run #${run.id} for ${config.name}`);
 
     // Report pending status to GitHub
-    const publicUrl = process.env.EIFL_PUBLIC_URL || req.url.split("/api")[0]; // Fallback to current host if possible
-    const runUrl = `${publicUrl}/pipeline/${pipeline.id}`; // Linking to pipeline for now, ideally runs specific page if UI supports it
+    const fallbackUrl = req.url.split("/api")[0]; // Fallback to current host if possible
+    const runUrl = getPipelineUrl(pipeline.id, fallbackUrl);
 
     // Fire and forget
     updateCommitStatus(
