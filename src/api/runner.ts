@@ -16,6 +16,8 @@ import {
   getPipeline,
   getRepo,
 } from "../db/queries";
+import { updateCommitStatus } from "../lib/github";
+import { getPipelineUrl } from "../lib/utils";
 import type { Run, Step, Runner } from "../db/schema";
 
 // Runner management
@@ -92,12 +94,33 @@ export function handlePollForJob(runner: Runner): Response {
   updateRunnerStatus(runner.id, "busy");
   updateRunStatus(run.id, "running");
 
+  // Update GitHub status to pending/running
+  if (run.commit_sha) {
+      // We already fetched pipeline and repo above
+      const runUrl = getPipelineUrl(pipeline.id);
+      updateCommitStatus(repo, run.commit_sha, "pending", runUrl, "Build running...")
+        .catch(e => console.error("Failed to set running status:", e));
+  }
+
   const steps = getSteps(run.id);
   const pipelineConfig = JSON.parse(pipeline.config);
 
   // Construct repo URL (assumes server URL is known by runner)
   // If remote_url is present, use that instead of local git server
-  const repoUrl = repo.remote_url || `/git/${repo.path}`;
+  let repoUrl = repo.remote_url || `/git/${repo.path}`;
+
+  // If using GitHub and token is available, inject it into the URL for authentication
+  if (repoUrl.startsWith("https://github.com/") && process.env.GITHUB_TOKEN) {
+    try {
+      const githubUrl = new URL(repoUrl);
+      githubUrl.username = "oauth2";
+      githubUrl.password = process.env.GITHUB_TOKEN;
+      repoUrl = githubUrl.toString();
+    } catch (e) {
+      console.error("Failed to construct GitHub URL with token:", e);
+      // Fallback: leave repoUrl unchanged if URL construction fails
+    }
+  }
 
   const job: JobPayload = {
     run,
@@ -162,6 +185,28 @@ export async function handleRunComplete(runner: Runner, req: Request): Promise<R
   }
 
   updateRunStatus(body.runId, body.status);
+
+  // Update GitHub status
+  try {
+    const run = getRun(body.runId);
+    if (run && run.commit_sha) {
+      const pipeline = getPipeline(run.pipeline_id);
+      if (pipeline) {
+        const repo = getRepo(pipeline.repo_id);
+        if (repo) {
+            const runUrl = getPipelineUrl(pipeline.id);
+            const description = body.status === "success" ? "Build passed" : "Build failed";
+            const state = body.status === "success" ? "success" : "failure";
+
+            // Fire and forget
+            updateCommitStatus(repo, run.commit_sha, state, runUrl, description)
+                .catch(err => console.error("Failed to update status on complete:", err));
+        }
+      }
+    }
+  } catch (error) {
+    console.error("Error updating status:", error);
+  }
 
   // Record metrics
   if (body.metrics) {
