@@ -49,7 +49,8 @@ export async function executeJob(
       job.repoUrl.startsWith("git@");
     const gitUrl = isAbsolute ? job.repoUrl : `${serverUrl}${job.repoUrl}`;
 
-    // Mask token in logs - handles various auth formats: oauth2:token@, username:password@, token@
+    // Mask token in logs - handles various HTTP(S) auth formats: oauth2:token@, username:password@, token@
+    // Note: SSH URLs (git@) don't use embedded credentials in the same way and are not masked
     const maskedUrl = gitUrl.replace(
       /https?:\/\/([^@\/]+@)/,
       (match, credentials) => {
@@ -58,12 +59,14 @@ export async function executeJob(
           return match.replace(credentials, "oauth2:***@");
         }
         // If it's username:password format, replace with username:***@
-        if (credentials.includes(":")) {
+        else if (credentials.includes(":")) {
           const username = credentials.split(":")[0];
           return match.replace(credentials, `${username}:***@`);
         }
         // For other formats (like token@), replace with ***@
-        return match.replace(credentials, "***@");
+        else {
+          return match.replace(credentials, "***@");
+        }
       }
     );
     console.log(`Cloning ${maskedUrl}...`);
