@@ -1,132 +1,166 @@
 import { getRepoByRemoteUrl, upsertPipeline, createRun, createStep } from "../db/queries";
-import { validatePipelineConfig } from "../pipeline/parser";
+import { validatePipelineConfig, PipelineParseError } from "../pipeline/parser";
+
+// GitHub webhook payload types
+interface GitHubRepository {
+  clone_url: string;
+  name: string;
+  full_name: string;
+}
+
+interface GitHubPushPayload {
+  repository: GitHubRepository;
+  ref: string;
+  after: string;
+}
+
+function isValidPushPayload(payload: unknown): payload is GitHubPushPayload {
+  if (!payload || typeof payload !== "object") return false;
+  const p = payload as Record<string, unknown>;
+
+  if (!p.repository || typeof p.repository !== "object") return false;
+  const repo = p.repository as Record<string, unknown>;
+
+  return (
+    typeof repo.clone_url === "string" &&
+    typeof repo.name === "string" &&
+    typeof repo.full_name === "string" &&
+    typeof p.ref === "string" &&
+    typeof p.after === "string"
+  );
+}
+
+async function verifySignature(
+  payload: string,
+  signature: string,
+  secret: string
+): Promise<boolean> {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["verify"]
+  );
+
+  const signatureParts = signature.split("=");
+  if (signatureParts.length !== 2 || signatureParts[0] !== "sha256") {
+    return false;
+  }
+
+  const sigHex = signatureParts[1];
+  const sigBytes = new Uint8Array(
+    sigHex.match(/.{1,2}/g)!.map((byte) => parseInt(byte, 16))
+  );
+
+  return crypto.subtle.verify("HMAC", key, sigBytes, encoder.encode(payload));
+}
 
 export async function handleGithubWebhook(req: Request): Promise<Response> {
   const event = req.headers.get("x-github-event");
   const signature = req.headers.get("x-hub-signature-256");
   const webhookSecret = process.env.GITHUB_WEBHOOK_SECRET;
-  let payload: any;
 
+  // Read payload as text first (needed for signature verification)
+  const payloadText = await req.text();
+
+  // Verify signature if secret is configured
   if (webhookSecret) {
     if (!signature) {
-      return new Response("Missing signature", { status: 401 });
+      return Response.json({ error: "Missing signature" }, { status: 401 });
     }
 
-    const payloadText = await req.text();
-    const encoder = new TextEncoder();
-    const key = await crypto.subtle.importKey(
-      "raw",
-      encoder.encode(webhookSecret),
-      { name: "HMAC", hash: "SHA-256" },
-      false,
-      ["verify"]
-    );
-
-    const signatureParts = signature.split("=");
-    if (signatureParts.length !== 2 || signatureParts[0] !== "sha256") {
-      return new Response("Invalid signature format", { status: 401 });
-    }
-
-    const sigHex = signatureParts[1];
-    const sigBytes = new Uint8Array(
-      sigHex.match(/.{1,2}/g)!.map((byte) => parseInt(byte, 16))
-    );
-
-    const verified = await crypto.subtle.verify(
-      "HMAC",
-      key,
-      sigBytes,
-      encoder.encode(payloadText)
-    );
-
+    const verified = await verifySignature(payloadText, signature, webhookSecret);
     if (!verified) {
-      return new Response("Invalid signature", { status: 401 });
+      return Response.json({ error: "Invalid signature" }, { status: 401 });
     }
-
-    // Parse JSON after verification since we needed raw text for signature
-    payload = JSON.parse(payloadText);
   } else {
-    // If no secret configured, proceed (less secure, maybe warn?)
-    console.warn("GITHUB_WEBHOOK_SECRET not set. Webhook is insecure.");
-    payload = await req.json();
+    console.warn("GITHUB_WEBHOOK_SECRET not set. Webhook signature verification disabled.");
   }
 
+  // Parse payload
+  let payload: unknown;
+  try {
+    payload = JSON.parse(payloadText);
+  } catch {
+    return Response.json({ error: "Invalid JSON payload" }, { status: 400 });
+  }
+
+  // Only handle push events
   if (event !== "push") {
-    return new Response("Ignored event", { status: 200 });
+    return Response.json({ message: `Ignored event: ${event}` }, { status: 200 });
   }
 
   // Validate payload structure
-  if (!payload || typeof payload !== "object") {
-    return new Response("Invalid payload", { status: 400 });
-  }
-
-  if (!payload.repository || typeof payload.repository !== "object") {
-    return new Response("Invalid payload: missing repository", { status: 400 });
-  }
-
-  const repoUrl = payload.repository.clone_url;
-  const repoName = payload.repository.name;
-  const fullName = payload.repository.full_name;
-  const ref = payload.ref; // refs/heads/main
-  const after = payload.after; // commit sha
-
-  // Validate all required fields are present
-  const missingFields = [];
-  if (!repoUrl) missingFields.push("repository.clone_url");
-  if (!repoName) missingFields.push("repository.name");
-  if (!fullName) missingFields.push("repository.full_name");
-  if (!ref) missingFields.push("ref");
-  if (!after) missingFields.push("after");
-
-  if (missingFields.length > 0) {
-    return new Response(
-      `Invalid payload: missing required field(s): ${missingFields.join(", ")}`,
+  if (!isValidPushPayload(payload)) {
+    return Response.json(
+      { error: "Invalid payload: missing required fields (repository.clone_url, repository.name, repository.full_name, ref, after)" },
       { status: 400 }
     );
   }
 
-  // Find repo by remote URL
-  let repo = getRepoByRemoteUrl(repoUrl);
+  const { repository, ref, after } = payload;
 
+  // Find repo by remote URL
+  const repo = getRepoByRemoteUrl(repository.clone_url);
   if (!repo) {
-    console.log(`Repo not found for URL: ${repoUrl}`);
-    return new Response("Repository not configured in Eifl", { status: 404 });
+    console.log(`Repo not found for URL: ${repository.clone_url}`);
+    return Response.json(
+      { error: "Repository not configured in EIFL" },
+      { status: 404 }
+    );
   }
 
   const branch = ref.replace("refs/heads/", "");
-
-  console.log(`Received GitHub push for ${repo.name} (${branch}@${after})`);
+  console.log(`GitHub push: ${repo.name} (${branch}@${after.slice(0, 8)})`);
 
   // Fetch .eifl.json from GitHub
-  // Construct raw URL: https://raw.githubusercontent.com/{owner}/{repo}/{sha}/.eifl.json
-  const configUrl = `https://raw.githubusercontent.com/${fullName}/${after}/.eifl.json`;
-
-  // Support private repos via GITHUB_TOKEN
+  const configUrl = `https://raw.githubusercontent.com/${repository.full_name}/${after}/.eifl.json`;
   const headers: HeadersInit = {};
   if (process.env.GITHUB_TOKEN) {
-    // For raw content API, we might need a token if it's private.
-    // However, raw.githubusercontent.com usually works with token in Authorization header.
-    // Or we use the API: https://api.github.com/repos/{owner}/{repo}/contents/.eifl.json?ref={sha}
-    // But then we need to decode base64.
-    // Let's try raw with Authorization header first.
     headers["Authorization"] = `token ${process.env.GITHUB_TOKEN}`;
   }
 
   try {
     const configRes = await fetch(configUrl, { headers });
-    if (!configRes.ok) {
-        if (configRes.status === 404) {
-            console.log("No .eifl.json found");
-            return new Response("No pipeline config found", { status: 200 });
-        }
-        throw new Error(`Failed to fetch config: ${configRes.status}`);
+
+    if (configRes.status === 404) {
+      console.log(`No .eifl.json found in ${repository.full_name}@${after.slice(0, 8)}`);
+      return Response.json({ message: "No .eifl.json found" }, { status: 200 });
     }
 
-    const configJson = await configRes.json();
-    const config = validatePipelineConfig(configJson);
+    if (!configRes.ok) {
+      console.error(`Failed to fetch .eifl.json: ${configRes.status}`);
+      return Response.json(
+        { error: `Failed to fetch pipeline config: ${configRes.status}` },
+        { status: 502 }
+      );
+    }
+
+    const configText = await configRes.text();
+    let configJson: unknown;
+    try {
+      configJson = JSON.parse(configText);
+    } catch {
+      return Response.json(
+        { error: "Invalid JSON in .eifl.json" },
+        { status: 400 }
+      );
+    }
+
+    let config;
+    try {
+      config = validatePipelineConfig(configJson);
+    } catch (error) {
+      const message = error instanceof PipelineParseError
+        ? error.message
+        : "Invalid pipeline configuration";
+      return Response.json({ error: message }, { status: 400 });
+    }
 
     // Upsert pipeline
-    const pipeline = upsertPipeline(repo.id, config.name, configJson);
+    const pipeline = upsertPipeline(repo.id, config.name, configJson as object);
 
     // Create run
     const run = createRun(pipeline.id, after, branch, "github-push");
@@ -136,10 +170,16 @@ export async function handleGithubWebhook(req: Request): Promise<Response> {
       createStep(run.id, step.name, step.run);
     }
 
-    return new Response(`Triggered run ${run.id}`, { status: 201 });
-
+    console.log(`Triggered run #${run.id} for ${config.name}`);
+    return Response.json(
+      { message: `Triggered run ${run.id}`, runId: run.id },
+      { status: 201 }
+    );
   } catch (error) {
     console.error("Error processing GitHub webhook:", error);
-    return new Response("Internal Error", { status: 500 });
+    return Response.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
   }
 }

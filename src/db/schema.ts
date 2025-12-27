@@ -90,6 +90,7 @@ function initSchema(db: Database) {
     );
 
     CREATE INDEX IF NOT EXISTS idx_repos_project ON repos(project_id);
+    CREATE INDEX IF NOT EXISTS idx_repos_remote_url ON repos(remote_url);
     CREATE INDEX IF NOT EXISTS idx_pipelines_repo ON pipelines(repo_id);
     CREATE INDEX IF NOT EXISTS idx_runs_pipeline ON runs(pipeline_id);
     CREATE INDEX IF NOT EXISTS idx_runs_status ON runs(status);
