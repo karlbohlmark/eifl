@@ -1,5 +1,7 @@
 import { getRepoByRemoteUrl, upsertPipeline, createRun, createStep } from "../db/queries";
-import { validatePipelineConfig, PipelineParseError } from "../pipeline/parser";
+import { validatePipelineConfig, PipelineParseError, shouldTriggerOnPush } from "../pipeline/parser";
+import { updateCommitStatus } from "../lib/github";
+import { getPipelineUrl } from "../lib/utils";
 
 // GitHub webhook payload types
 interface GitHubRepository {
@@ -159,6 +161,12 @@ export async function handleGithubWebhook(req: Request): Promise<Response> {
       return Response.json({ error: message }, { status: 400 });
     }
 
+    // Check if pipeline should trigger on this branch
+    if (!shouldTriggerOnPush(config, branch)) {
+      console.log(`Pipeline ${config.name} not configured to run on branch ${branch}`);
+      return Response.json({ message: "Skipped: not configured for this branch" }, { status: 200 });
+    }
+
     // Upsert pipeline
     const pipeline = upsertPipeline(repo.id, config.name, configJson as object);
 
@@ -171,6 +179,20 @@ export async function handleGithubWebhook(req: Request): Promise<Response> {
     }
 
     console.log(`Triggered run #${run.id} for ${config.name}`);
+
+    // Report pending status to GitHub
+    const fallbackUrl = req.url.split("/api")[0]; // Fallback to current host if possible
+    const runUrl = getPipelineUrl(pipeline.id, fallbackUrl);
+
+    // Fire and forget
+    updateCommitStatus(
+      repo,
+      after,
+      "pending",
+      runUrl,
+      "Build queued"
+    ).catch(err => console.error("Failed to update status:", err));
+
     return Response.json(
       { message: `Triggered run ${run.id}`, runId: run.id },
       { status: 201 }
