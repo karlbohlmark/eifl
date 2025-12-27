@@ -1,0 +1,5 @@
+🚀 EIFL Server running at http://0.0.0.0:3000/
+   Git URL: http://0.0.0.0:3000/git/<project>/<repo>.git
+   API: http://0.0.0.0:3000/api/
+   Network: Accessible on all interfaces at port 3000
+Bundled page in 1852ms: src/index.html

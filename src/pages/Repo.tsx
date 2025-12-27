@@ -16,7 +16,14 @@ import {
   GitBranch,
   GitCommit,
   Play,
+  Copy,
+  Check,
+  Clock,
+  Loader2,
+  CheckCircle,
+  XCircle
 } from "lucide-react";
+import { formatRelativeTime } from "../lib/utils";
 
 interface Repo {
   id: number;
@@ -44,7 +51,19 @@ interface Pipeline {
   id: number;
   name: string;
   config: string;
+  latest_run_status: "pending" | "running" | "success" | "failed" | "cancelled" | null;
+  latest_run_id: number | null;
+  latest_run_date: string | null;
 }
+
+const STATUS_ICONS = {
+  pending: <Clock className="w-4 h-4 text-muted-foreground" />,
+  running: <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />,
+  success: <CheckCircle className="w-4 h-4 text-green-500" />,
+  failed: <XCircle className="w-4 h-4 text-red-500" />,
+  cancelled: <XCircle className="w-4 h-4 text-muted-foreground" />,
+  skipped: <Clock className="w-4 h-4 text-muted-foreground" />,
+};
 
 export function Repo() {
   const { id } = useParams<{ id: string }>();
@@ -60,6 +79,7 @@ export function Repo() {
   const [fileContent, setFileContent] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"files" | "commits" | "pipelines">("files");
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     fetchRepo();
@@ -171,6 +191,14 @@ export function Repo() {
     setFileContent(null);
   }
 
+  function copyCloneUrl() {
+    if (!repo) return;
+    const url = `http://localhost:3000/git/${repo.path}`;
+    navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
   if (loading) {
     return (
       <div className="container mx-auto p-8">
@@ -221,8 +249,16 @@ export function Repo() {
         )}
       </div>
 
-      <div className="text-sm text-muted-foreground font-mono mb-6">
-        git clone http://localhost:3000/git/{repo.path}
+      <div className="flex items-center gap-2 text-sm text-muted-foreground font-mono mb-6">
+        <span>git clone http://localhost:3000/git/{repo.path}</span>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6"
+          onClick={copyCloneUrl}
+        >
+          {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+        </Button>
       </div>
 
       <div className="flex gap-2 mb-6">
@@ -328,8 +364,7 @@ git push -u origin main`}
                     <div>
                       <p className="font-medium">{commit.message}</p>
                       <p className="text-sm text-muted-foreground">
-                        {commit.author} committed on{" "}
-                        {new Date(commit.date).toLocaleDateString()}
+                        {commit.author} committed {formatRelativeTime(commit.date)}
                       </p>
                     </div>
                     <code className="text-xs text-muted-foreground">
@@ -359,20 +394,35 @@ git push -u origin main`}
             pipelines.map((pipeline) => (
               <Card key={pipeline.id}>
                 <CardHeader className="py-4">
-                  <CardTitle className="flex items-center justify-between">
-                    <Link
-                      to={`/pipeline/${pipeline.id}`}
-                      className="hover:underline"
-                    >
-                      {pipeline.name}
-                    </Link>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <Link
+                        to={`/pipeline/${pipeline.id}`}
+                        className="font-semibold hover:underline"
+                      >
+                        {pipeline.name}
+                      </Link>
+                      {pipeline.latest_run_status && (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          {STATUS_ICONS[pipeline.latest_run_status]}
+                          <span>
+                            {pipeline.latest_run_status}
+                            {pipeline.latest_run_date && (
+                              <span className="ml-1">
+                                ({formatRelativeTime(pipeline.latest_run_date)})
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                      )}
+                    </div>
                     <Link to={`/pipeline/${pipeline.id}`}>
                       <Button size="sm">
                         <Play className="w-4 h-4 mr-2" />
                         View
                       </Button>
                     </Link>
-                  </CardTitle>
+                  </div>
                 </CardHeader>
               </Card>
             ))
