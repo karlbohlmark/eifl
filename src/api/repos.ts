@@ -58,7 +58,7 @@ export async function handleCreateRepo(projectId: number, req: Request): Promise
     return Response.json({ error: "Project not found" }, { status: 404 });
   }
 
-  const body = await req.json() as { name: string };
+  const body = await req.json() as { name: string; remoteUrl?: string };
 
   if (!body.name || typeof body.name !== "string") {
     return Response.json({ error: "Name is required" }, { status: 400 });
@@ -69,8 +69,11 @@ export async function handleCreateRepo(projectId: number, req: Request): Promise
   const repoPath = `${project.name}/${repoName}.git`;
 
   try {
-    await initBareRepo(repoPath);
-    const repo = createRepo(projectId, repoName, repoPath);
+    // Only init bare repo if it's not a remote repo
+    if (!body.remoteUrl) {
+      await initBareRepo(repoPath);
+    }
+    const repo = createRepo(projectId, repoName, repoPath, body.remoteUrl);
     return Response.json(repo, { status: 201 });
   } catch (error) {
     return Response.json({ error: "Failed to create repository" }, { status: 500 });

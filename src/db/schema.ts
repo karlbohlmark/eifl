@@ -32,6 +32,7 @@ function initSchema(db: Database) {
       project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
       name TEXT NOT NULL,
       path TEXT NOT NULL UNIQUE,
+      remote_url TEXT,
       default_branch TEXT DEFAULT 'main',
       created_at TEXT DEFAULT (datetime('now')),
       UNIQUE(project_id, name)
@@ -89,6 +90,7 @@ function initSchema(db: Database) {
     );
 
     CREATE INDEX IF NOT EXISTS idx_repos_project ON repos(project_id);
+    CREATE INDEX IF NOT EXISTS idx_repos_remote_url ON repos(remote_url);
     CREATE INDEX IF NOT EXISTS idx_pipelines_repo ON pipelines(repo_id);
     CREATE INDEX IF NOT EXISTS idx_runs_pipeline ON runs(pipeline_id);
     CREATE INDEX IF NOT EXISTS idx_runs_status ON runs(status);
@@ -96,6 +98,20 @@ function initSchema(db: Database) {
     CREATE INDEX IF NOT EXISTS idx_metrics_run ON metrics(run_id);
     CREATE INDEX IF NOT EXISTS idx_metrics_key ON metrics(key);
   `);
+
+  // Migrations
+  try {
+    // Check if remote_url column exists using table schema, not by querying data
+    const repoTableInfo = db.prepare("PRAGMA table_info(repos);").all() as { name: string }[];
+    const hasRemoteUrlColumn = repoTableInfo.some((column) => column.name === "remote_url");
+
+    if (!hasRemoteUrlColumn) {
+      console.log("Migrating database: adding remote_url to repos table");
+      db.exec("ALTER TABLE repos ADD COLUMN remote_url TEXT");
+    }
+  } catch (error) {
+    console.error("Migration check failed:", error);
+  }
 }
 
 // Types
@@ -111,6 +127,7 @@ export interface Repo {
   project_id: number;
   name: string;
   path: string;
+  remote_url: string | null;
   default_branch: string;
   created_at: string;
 }

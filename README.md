@@ -5,6 +5,7 @@ A lightweight, self-hosted Git + CI platform built with Bun. Designed for perfor
 ## Features
 
 - **Git hosting** - Push/pull via HTTP smart protocol
+- **GitHub integration** - Use GitHub for source control, EIFL for CI
 - **Pipeline execution** - Define pipelines in `.eifl.json`
 - **Automatic triggers** - Pipelines run on push
 - **Manual triggers** - Run pipelines on demand
@@ -65,6 +66,11 @@ EIFL_RUNNER_TOKEN=<token> \
 bun run runner
 ```
 
+## GitHub Integration
+
+You can use GitHub for source control and pull requests while using EIFL for CI.
+See [docs/GITHUB_INTEGRATION.md](docs/GITHUB_INTEGRATION.md) for setup instructions.
+
 ## Pipeline Configuration
 
 Create `.eifl.json` in your repository:
@@ -105,6 +111,8 @@ echo "::metric::memory_mb=256:mb"
 | `PORT` | `3000` | Server port |
 | `HOST` | `0.0.0.0` | Bind address |
 | `NODE_ENV` | - | Set to `production` for prod mode |
+| `GITHUB_WEBHOOK_SECRET` | - | Secret for GitHub webhook verification |
+| `GITHUB_TOKEN` | - | PAT for private repo access |
 
 ### Runner
 
