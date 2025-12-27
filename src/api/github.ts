@@ -70,8 +70,18 @@ export async function handleGithubWebhook(req: Request): Promise<Response> {
   const ref = payload.ref; // refs/heads/main
   const after = payload.after; // commit sha
 
-  if (!repoUrl || !ref || !after || !fullName) {
-    return new Response("Invalid payload: missing required fields", { status: 400 });
+  // Validate all required fields are present
+  const missingFields = [];
+  if (!repoUrl) missingFields.push("repository.clone_url");
+  if (!fullName) missingFields.push("repository.full_name");
+  if (!ref) missingFields.push("ref");
+  if (!after) missingFields.push("after");
+
+  if (missingFields.length > 0) {
+    return new Response(
+      `Invalid payload: missing required field(s): ${missingFields.join(", ")}`,
+      { status: 400 }
+    );
   }
 
   // Find repo by remote URL
