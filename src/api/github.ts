@@ -58,13 +58,20 @@ export async function handleGithubWebhook(req: Request): Promise<Response> {
   if (event !== "push") {
     return new Response("Ignored event", { status: 200 });
   }
-  const repoUrl = payload.repository?.clone_url;
-  const repoName = payload.repository?.name;
+
+  // Validate payload structure
+  if (!payload.repository || typeof payload.repository !== "object") {
+    return new Response("Invalid payload: missing repository", { status: 400 });
+  }
+
+  const repoUrl = payload.repository.clone_url;
+  const repoName = payload.repository.name;
+  const fullName = payload.repository.full_name;
   const ref = payload.ref; // refs/heads/main
   const after = payload.after; // commit sha
 
-  if (!repoUrl || !ref || !after) {
-    return new Response("Invalid payload", { status: 400 });
+  if (!repoUrl || !ref || !after || !fullName) {
+    return new Response("Invalid payload: missing required fields", { status: 400 });
   }
 
   // Find repo by remote URL
@@ -88,7 +95,6 @@ export async function handleGithubWebhook(req: Request): Promise<Response> {
 
   // Fetch .eifl.json from GitHub
   // Construct raw URL: https://raw.githubusercontent.com/{owner}/{repo}/{sha}/.eifl.json
-  const fullName = payload.repository.full_name;
   const configUrl = `https://raw.githubusercontent.com/${fullName}/${after}/.eifl.json`;
 
   // Support private repos via GITHUB_TOKEN
