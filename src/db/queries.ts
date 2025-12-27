@@ -79,9 +79,26 @@ export function upsertPipeline(repoId: number, name: string, config: object): Pi
   return stmt.get(repoId, name, configJson) as Pipeline;
 }
 
-export function getPipelines(repoId: number): Pipeline[] {
+export interface PipelineWithLatestRun extends Pipeline {
+  latest_run_status: RunStatus | null;
+  latest_run_id: number | null;
+  latest_run_date: string | null;
+}
+
+export function getPipelines(repoId: number): PipelineWithLatestRun[] {
   const db = getDb();
-  return db.query("SELECT * FROM pipelines WHERE repo_id = ? ORDER BY name").all(repoId) as Pipeline[];
+  return db.query(`
+    SELECT p.*,
+           r.status as latest_run_status,
+           r.id as latest_run_id,
+           r.created_at as latest_run_date
+    FROM pipelines p
+    LEFT JOIN runs r ON r.id = (
+      SELECT id FROM runs WHERE pipeline_id = p.id ORDER BY created_at DESC LIMIT 1
+    )
+    WHERE p.repo_id = ?
+    ORDER BY p.name
+  `).all(repoId) as PipelineWithLatestRun[];
 }
 
 export function getPipeline(id: number): Pipeline | null {
