@@ -78,7 +78,7 @@ export function PipelineView() {
     Record<string, Array<{ value: number; created_at: string }>>
   >({});
   const [loading, setLoading] = useState(true);
-  const [showMetrics, setShowMetrics] = useState(false);
+  const [showMetrics, setShowMetrics] = useState(true);
 
   // Get run ID from URL if present
   const urlRunId = searchParams.get("run");
@@ -240,7 +240,7 @@ export function PipelineView() {
           <CardContent>
             <div className="grid gap-4 md:grid-cols-2">
               {selectedRun.metrics
-                .filter((m) => m.key === "total_duration_ms")
+                .filter((m) => !m.key.startsWith("step."))
                 .map((metric) => (
                   <div
                     key={metric.key}

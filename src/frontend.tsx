@@ -12,12 +12,14 @@ import { Dashboard } from "./pages/Dashboard";
 import { Project } from "./pages/Project";
 import { Repo } from "./pages/Repo";
 import { PipelineView } from "./pages/Pipeline";
+import { Navbar } from "./components/Navbar";
 import "./index.css";
 
 function App() {
   return (
     <BrowserRouter>
       <div className="min-h-screen bg-background text-foreground">
+        <Navbar />
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/project/:id" element={<Project />} />

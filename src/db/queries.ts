@@ -200,7 +200,7 @@ export function getMetricHistory(pipelineId: number, key: string, limit = 100): 
     FROM metrics m
     JOIN runs r ON m.run_id = r.id
     WHERE r.pipeline_id = ? AND m.key = ? AND r.status = 'success'
-    ORDER BY r.created_at DESC
+    ORDER BY r.created_at ASC
     LIMIT ?
   `).all(pipelineId, key, limit) as Array<{ run_id: number; value: number; created_at: string; commit_sha: string | null }>;
 }
