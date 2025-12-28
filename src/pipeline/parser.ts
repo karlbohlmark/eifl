@@ -19,10 +19,18 @@ export interface PipelineTriggers {
   schedule?: ScheduleTrigger[];
 }
 
+export interface CachePresets {
+  bun?: boolean;
+  node?: boolean;
+  zig?: boolean;
+  rust?: boolean;
+}
+
 export interface PipelineConfig {
   name: string;
   triggers?: PipelineTriggers;
   runner_tags?: string[]; // Tags that runners must have to execute this pipeline
+  cache?: CachePresets;
   steps: PipelineStep[];
 }
 
@@ -115,6 +123,30 @@ export function validatePipelineConfig(config: unknown): PipelineConfig {
     runner_tags = c.runner_tags as string[];
   }
 
+  // Validate cache (optional)
+  let cache: CachePresets | undefined;
+  if (c.cache !== undefined) {
+    if (typeof c.cache !== "object" || c.cache === null) {
+      throw new PipelineParseError("'cache' must be an object");
+    }
+
+    const validPresets = ["bun", "node", "zig", "rust"];
+    const cacheConfig = c.cache as Record<string, unknown>;
+    cache = {};
+
+    for (const [key, value] of Object.entries(cacheConfig)) {
+      if (!validPresets.includes(key)) {
+        throw new PipelineParseError(
+          `'cache.${key}' is not a valid preset. Valid presets: ${validPresets.join(", ")}`
+        );
+      }
+      if (typeof value !== "boolean") {
+        throw new PipelineParseError(`'cache.${key}' must be a boolean`);
+      }
+      (cache as Record<string, boolean>)[key] = value;
+    }
+  }
+
   // Validate triggers (optional)
   let triggers: PipelineTriggers | undefined;
   if (c.triggers !== undefined) {
@@ -181,6 +213,7 @@ export function validatePipelineConfig(config: unknown): PipelineConfig {
     name: c.name as string,
     triggers,
     runner_tags,
+    cache,
     steps,
   };
 }

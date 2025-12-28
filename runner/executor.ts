@@ -1,5 +1,6 @@
 import { $ } from "bun";
 import { collectMetrics } from "./metrics";
+import { restoreCache, saveCache, type CachePresets, type CacheResult } from "./cache";
 import type { Run, Step } from "../src/db/schema";
 
 export interface JobPayload {
@@ -10,6 +11,7 @@ export interface JobPayload {
   branch: string | null;
   pipelineConfig: {
     name: string;
+    cache?: CachePresets;
     steps: Array<{
       name: string;
       run: string;
@@ -84,6 +86,21 @@ export async function executeJob(
       await $`git -C ${workDir} checkout ${job.branch}`.quiet();
     }
 
+    // Restore cache if configured
+    let cacheResults: CacheResult[] = [];
+    if (job.pipelineConfig.cache) {
+      console.log("\n📦 Restoring cache...");
+      cacheResults = await restoreCache(workDir, job.pipelineConfig.cache);
+      for (const result of cacheResults) {
+        const status = result.hit ? "✅ HIT" : "❌ MISS";
+        const keyInfo = result.key ? ` (${result.key.slice(0, 8)})` : "";
+        console.log(`   ${result.preset}: ${status}${keyInfo}`);
+        if (result.error) {
+          console.log(`      Error: ${result.error}`);
+        }
+      }
+    }
+
     // Execute steps
     let allSuccess = true;
     const allMetrics: Array<{ key: string; value: number; unit?: string }> = [];
@@ -147,6 +164,34 @@ export async function executeJob(
       // Parse any metrics from output
       const outputMetrics = collectMetrics.parseOutputMetrics(output);
       allMetrics.push(...outputMetrics);
+    }
+
+    // Save cache if configured and build succeeded
+    if (job.pipelineConfig.cache && allSuccess) {
+      console.log("\n📦 Saving cache...");
+      const saveResults = await saveCache(workDir, job.pipelineConfig.cache);
+      for (const result of saveResults) {
+        if (result.key) {
+          const status = result.hit ? "already cached" : "saved";
+          console.log(`   ${result.preset}: ${status} (${result.durationMs}ms)`);
+        }
+        if (result.error) {
+          console.log(`      Error: ${result.error}`);
+        }
+      }
+    }
+
+    // Add cache metrics
+    for (const result of cacheResults) {
+      allMetrics.push({
+        key: `cache.${result.preset}.hit`,
+        value: result.hit ? 1 : 0,
+      });
+      allMetrics.push({
+        key: `cache.${result.preset}.restore_ms`,
+        value: result.durationMs,
+        unit: "ms",
+      });
     }
 
     // Calculate total duration
