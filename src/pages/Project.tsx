@@ -4,7 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, GitBranch, ArrowLeft, Copy, Check } from "lucide-react";
+import { Plus, GitBranch, ArrowLeft, Copy, Check, Github } from "lucide-react";
+import { GitHubRepoForm } from "@/components/GitHubRepoForm";
 
 interface Project {
   id: number;
@@ -18,6 +19,7 @@ interface Repo {
   project_id: number;
   name: string;
   path: string;
+  remote_url: string | null;
   created_at: string;
 }
 
@@ -26,7 +28,7 @@ export function Project() {
   const [project, setProject] = useState<Project | null>(null);
   const [repos, setRepos] = useState<Repo[]>([]);
   const [newRepoName, setNewRepoName] = useState("");
-  const [showNewRepo, setShowNewRepo] = useState(false);
+  const [formMode, setFormMode] = useState<"none" | "local" | "github">("none");
   const [loading, setLoading] = useState(true);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
@@ -66,7 +68,7 @@ export function Project() {
 
       if (res.ok) {
         setNewRepoName("");
-        setShowNewRepo(false);
+        setFormMode("none");
         fetchProject();
       }
     } catch (error) {
@@ -86,9 +88,9 @@ export function Project() {
         <div className="mb-6">
           <Skeleton className="h-4 w-32" />
         </div>
-        <div className="flex justify-between items-center mb-8">
+        <div className="flex items-center gap-4 mb-8">
           <Skeleton className="h-10 w-48" />
-          <Skeleton className="h-10 w-32" />
+          <Skeleton className="h-10 w-32 ml-auto" />
         </div>
         <div className="grid gap-4">
           <Skeleton className="h-32 w-full" />
@@ -118,15 +120,32 @@ export function Project() {
         </Link>
       </div>
 
-      <div className="flex justify-between items-center mb-8">
+      <div className="flex items-center gap-4 mb-8">
         <h1 className="text-3xl font-bold">{project.name}</h1>
-        <Button onClick={() => setShowNewRepo(!showNewRepo)}>
-          <Plus className="w-4 h-4 mr-2" />
-          New Repository
-        </Button>
+        <div className="flex gap-2 ml-auto">
+          <Button onClick={() => setFormMode(formMode === "local" ? "none" : "local")}>
+            <Plus className="w-4 h-4 mr-2" />
+            New Repository
+          </Button>
+          <Button variant="outline" onClick={() => setFormMode(formMode === "github" ? "none" : "github")}>
+            <Github className="w-4 h-4 mr-2" />
+            Connect GitHub
+          </Button>
+        </div>
       </div>
 
-      {showNewRepo && (
+      {formMode === "github" && (
+        <GitHubRepoForm
+          projectId={parseInt(id!)}
+          onSuccess={() => {
+            setFormMode("none");
+            fetchProject();
+          }}
+          onCancel={() => setFormMode("none")}
+        />
+      )}
+
+      {formMode === "local" && (
         <Card className="mb-6">
           <CardContent className="pt-6">
             <div className="flex gap-4">
@@ -137,7 +156,7 @@ export function Project() {
                 onKeyDown={(e) => e.key === "Enter" && createRepo()}
               />
               <Button onClick={createRepo}>Create</Button>
-              <Button variant="outline" onClick={() => setShowNewRepo(false)}>
+              <Button variant="outline" onClick={() => setFormMode("none")}>
                 Cancel
               </Button>
             </div>
@@ -162,9 +181,15 @@ export function Project() {
         <Card>
           <CardContent className="py-12 text-center">
             <p className="text-muted-foreground mb-4">No repositories yet</p>
-            <Button onClick={() => setShowNewRepo(true)}>
-              Create your first repository
-            </Button>
+            <div className="flex gap-2 justify-center">
+              <Button onClick={() => setFormMode("local")}>
+                Create your first repository
+              </Button>
+              <Button variant="outline" onClick={() => setFormMode("github")}>
+                <Github className="w-4 h-4 mr-2" />
+                Connect GitHub
+              </Button>
+            </div>
           </CardContent>
         </Card>
       ) : (
@@ -173,26 +198,41 @@ export function Project() {
             <Card key={repo.id}>
               <CardHeader className="py-4">
                 <CardTitle className="text-lg flex items-center gap-2">
-                  <GitBranch className="w-5 h-5 text-muted-foreground" />
+                  {repo.remote_url ? (
+                    <Github className="w-5 h-5 text-muted-foreground" />
+                  ) : (
+                    <GitBranch className="w-5 h-5 text-muted-foreground" />
+                  )}
                   <Link to={`/repo/${repo.id}`} className="hover:underline">
                     {repo.name}
                   </Link>
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-0">
-                <div className="flex items-center gap-2">
-                  <p className="text-sm text-muted-foreground font-mono">
-                    git clone http://localhost:3000/git/{repo.path}
-                  </p>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6"
-                    onClick={() => copyToClipboard(`http://localhost:3000/git/${repo.path}`, `repo-${repo.id}`)}
+                {repo.remote_url ? (
+                  <a
+                    href={repo.remote_url.replace(/\.git$/, "")}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-muted-foreground hover:text-foreground hover:underline"
                   >
-                    {copiedId === `repo-${repo.id}` ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-                  </Button>
-                </div>
+                    {repo.remote_url}
+                  </a>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm text-muted-foreground font-mono">
+                      git clone http://localhost:3000/git/{repo.path}
+                    </p>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={() => copyToClipboard(`http://localhost:3000/git/${repo.path}`, `repo-${repo.id}`)}
+                    >
+                      {copiedId === `repo-${repo.id}` ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
           ))}

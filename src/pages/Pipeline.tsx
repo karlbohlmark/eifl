@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useSearchParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -70,6 +70,7 @@ const STATUS_ICONS = {
 
 export function PipelineView() {
   const { id } = useParams<{ id: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [pipeline, setPipeline] = useState<Pipeline | null>(null);
   const [runs, setRuns] = useState<Run[]>([]);
   const [selectedRun, setSelectedRun] = useState<RunDetails | null>(null);
@@ -78,6 +79,9 @@ export function PipelineView() {
   >({});
   const [loading, setLoading] = useState(true);
   const [showMetrics, setShowMetrics] = useState(false);
+
+  // Get run ID from URL if present
+  const urlRunId = searchParams.get("run");
 
   useEffect(() => {
     fetchPipeline();
@@ -107,7 +111,9 @@ export function PipelineView() {
         const runsData = await runsRes.json();
         setRuns(runsData);
         if (runsData.length > 0 && !selectedRun) {
-          fetchRun(runsData[0].id);
+          // If URL has a run ID, use that; otherwise use the first run
+          const targetRunId = urlRunId ? parseInt(urlRunId) : runsData[0].id;
+          fetchRun(targetRunId);
         }
       }
     } catch (error) {
@@ -115,6 +121,11 @@ export function PipelineView() {
     } finally {
       setLoading(false);
     }
+  }
+
+  function selectRun(runId: number) {
+    setSearchParams({ run: String(runId) });
+    fetchRun(runId);
   }
 
   async function fetchRuns() {
@@ -147,7 +158,7 @@ export function PipelineView() {
       if (res.ok) {
         const run = await res.json();
         fetchRuns();
-        fetchRun(run.id);
+        selectRun(run.id);
       }
     } catch (error) {
       console.error("Failed to trigger pipeline:", error);
@@ -288,7 +299,7 @@ export function PipelineView() {
                 runs.map((run) => (
                   <button
                     key={run.id}
-                    onClick={() => fetchRun(run.id)}
+                    onClick={() => selectRun(run.id)}
                     className={`w-full p-3 flex items-center gap-2 hover:bg-muted border-b last:border-0 ${
                       selectedRun?.id === run.id ? "bg-muted" : ""
                     }`}

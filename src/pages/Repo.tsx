@@ -21,7 +21,9 @@ import {
   Clock,
   Loader2,
   CheckCircle,
-  XCircle
+  XCircle,
+  Github,
+  ExternalLink,
 } from "lucide-react";
 import { formatRelativeTime } from "../lib/utils";
 
@@ -31,6 +33,7 @@ interface Repo {
   name: string;
   path: string;
   default_branch: string;
+  remote_url: string | null;
 }
 
 interface TreeEntry {
@@ -85,37 +88,56 @@ export function Repo() {
     fetchRepo();
   }, [id]);
 
+  // Set default tab to pipelines for GitHub repos
   useEffect(() => {
-    if (currentBranch) {
+    if (repo?.remote_url && tab !== "pipelines") {
+      setTab("pipelines");
+    }
+  }, [repo?.remote_url]);
+
+  useEffect(() => {
+    if (currentBranch && !repo?.remote_url) {
       if (tab === "files") {
         fetchTree();
       } else if (tab === "commits") {
         fetchCommits();
       }
     }
-  }, [currentBranch, currentPath, tab]);
+  }, [currentBranch, currentPath, tab, repo?.remote_url]);
 
   async function fetchRepo() {
     try {
-      const [repoRes, branchesRes, pipelinesRes] = await Promise.all([
-        fetch(`/api/repos/${id}`),
-        fetch(`/api/repos/${id}/branches`),
-        fetch(`/api/repos/${id}/pipelines`),
-      ]);
-
-      if (repoRes.ok) {
-        const repoData = await repoRes.json();
-        setRepo(repoData);
+      const repoRes = await fetch(`/api/repos/${id}`);
+      if (!repoRes.ok) {
+        setLoading(false);
+        return;
       }
 
-      if (branchesRes.ok) {
-        const data = await branchesRes.json();
-        setBranches(data.branches);
-        setCurrentBranch(data.branches[0] || data.default || "main");
-      }
+      const repoData = await repoRes.json();
+      setRepo(repoData);
 
-      if (pipelinesRes.ok) {
-        setPipelines(await pipelinesRes.json());
+      // For GitHub repos, only fetch pipelines (no local git to browse)
+      if (repoData.remote_url) {
+        const pipelinesRes = await fetch(`/api/repos/${id}/pipelines`);
+        if (pipelinesRes.ok) {
+          setPipelines(await pipelinesRes.json());
+        }
+      } else {
+        // For local repos, fetch branches and pipelines
+        const [branchesRes, pipelinesRes] = await Promise.all([
+          fetch(`/api/repos/${id}/branches`),
+          fetch(`/api/repos/${id}/pipelines`),
+        ]);
+
+        if (branchesRes.ok) {
+          const data = await branchesRes.json();
+          setBranches(data.branches);
+          setCurrentBranch(data.branches[0] || data.default || "main");
+        }
+
+        if (pipelinesRes.ok) {
+          setPipelines(await pipelinesRes.json());
+        }
       }
     } catch (error) {
       console.error("Failed to fetch repo:", error);
@@ -229,11 +251,15 @@ export function Repo() {
 
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold flex items-center gap-2">
-          <GitBranch className="w-8 h-8" />
+          {repo.remote_url ? (
+            <Github className="w-8 h-8" />
+          ) : (
+            <GitBranch className="w-8 h-8" />
+          )}
           {repo.name}
         </h1>
 
-        {branches.length > 0 && (
+        {!repo.remote_url && branches.length > 0 && (
           <Select value={currentBranch} onValueChange={setCurrentBranch}>
             <SelectTrigger className="w-40">
               <SelectValue />
@@ -249,33 +275,49 @@ export function Repo() {
         )}
       </div>
 
-      <div className="flex items-center gap-2 text-sm text-muted-foreground font-mono mb-6">
-        <span>git clone http://localhost:3000/git/{repo.path}</span>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-6 w-6"
-          onClick={copyCloneUrl}
+      {repo.remote_url ? (
+        <a
+          href={repo.remote_url.replace(/\.git$/, "")}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6"
         >
-          {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-        </Button>
-      </div>
+          <span>{repo.remote_url}</span>
+          <ExternalLink className="w-4 h-4" />
+        </a>
+      ) : (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground font-mono mb-6">
+          <span>git clone http://localhost:3000/git/{repo.path}</span>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6"
+            onClick={copyCloneUrl}
+          >
+            {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+          </Button>
+        </div>
+      )}
 
       <div className="flex gap-2 mb-6">
-        <Button
-          variant={tab === "files" ? "default" : "outline"}
-          onClick={() => setTab("files")}
-        >
-          <File className="w-4 h-4 mr-2" />
-          Files
-        </Button>
-        <Button
-          variant={tab === "commits" ? "default" : "outline"}
-          onClick={() => setTab("commits")}
-        >
-          <GitCommit className="w-4 h-4 mr-2" />
-          Commits
-        </Button>
+        {!repo.remote_url && (
+          <>
+            <Button
+              variant={tab === "files" ? "default" : "outline"}
+              onClick={() => setTab("files")}
+            >
+              <File className="w-4 h-4 mr-2" />
+              Files
+            </Button>
+            <Button
+              variant={tab === "commits" ? "default" : "outline"}
+              onClick={() => setTab("commits")}
+            >
+              <GitCommit className="w-4 h-4 mr-2" />
+              Commits
+            </Button>
+          </>
+        )}
         <Button
           variant={tab === "pipelines" ? "default" : "outline"}
           onClick={() => setTab("pipelines")}
@@ -283,9 +325,22 @@ export function Repo() {
           <Play className="w-4 h-4 mr-2" />
           Pipelines
         </Button>
+        {repo.remote_url && (
+          <a
+            href={repo.remote_url.replace(/\.git$/, "")}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <Button variant="outline">
+              <Github className="w-4 h-4 mr-2" />
+              View on GitHub
+              <ExternalLink className="w-3 h-3 ml-2" />
+            </Button>
+          </a>
+        )}
       </div>
 
-      {tab === "files" && (
+      {tab === "files" && !repo.remote_url && (
         <Card>
           <CardContent className="p-0">
             {branches.length === 0 ? (
@@ -347,7 +402,7 @@ git push -u origin main`}
         </Card>
       )}
 
-      {tab === "commits" && (
+      {tab === "commits" && !repo.remote_url && (
         <Card>
           <CardContent className="p-0">
             {commits.length === 0 ? (

@@ -44,7 +44,7 @@ import {
   handleRunComplete,
   handleRunnerHeartbeat,
 } from "./api/runner";
-import { handleGithubWebhook } from "./api/github";
+import { handleGithubWebhook, handleVerifyGitHubRepo } from "./api/github";
 
 // Initialize database on startup
 getDb();
@@ -70,6 +70,11 @@ const server = serve({
     // Git HTTP protocol
     if (path.startsWith("/git/")) {
       return handleGitRequest(req, path.slice(5));
+    }
+
+    // GitHub API
+    if (path === "/api/github/verify" && method === "GET") {
+      return handleVerifyGitHubRepo(url);
     }
 
     // GitHub Webhook

@@ -1,5 +1,87 @@
 import type { Repo } from "../db/schema";
 
+// Types for GitHub repo verification
+export interface GitHubRepoInfo {
+  name: string;
+  fullName: string;
+  private: boolean;
+  defaultBranch: string;
+  cloneUrl: string;
+}
+
+export interface VerifyRepoResult {
+  valid: boolean;
+  error?: string;
+  repoInfo?: GitHubRepoInfo;
+}
+
+// Check if GITHUB_TOKEN is configured
+export function isGitHubTokenConfigured(): boolean {
+  return !!process.env.GITHUB_TOKEN;
+}
+
+// Verify a GitHub repository exists and is accessible
+export async function verifyGitHubRepo(url: string): Promise<VerifyRepoResult> {
+  // Parse URL using existing regex pattern
+  const match = url.match(/github\.com[:/]([^/]+)\/([^/]+?)(?:\.git)?$/);
+  if (!match) {
+    return { valid: false, error: "Invalid GitHub URL format" };
+  }
+
+  const [, owner, repoName] = match;
+  const token = process.env.GITHUB_TOKEN;
+
+  const headers: HeadersInit = {
+    Accept: "application/vnd.github.v3+json",
+    "User-Agent": "Eifl-CI",
+  };
+  if (token) {
+    headers["Authorization"] = `token ${token}`;
+  }
+
+  try {
+    const response = await fetch(
+      `https://api.github.com/repos/${owner}/${repoName}`,
+      { headers }
+    );
+
+    if (response.status === 404) {
+      return {
+        valid: false,
+        error: token
+          ? "Repository not found"
+          : "Repository not found (may be private - configure GITHUB_TOKEN)",
+      };
+    }
+
+    if (response.status === 403) {
+      const rateLimit = response.headers.get("X-RateLimit-Remaining");
+      if (rateLimit === "0") {
+        return { valid: false, error: "GitHub API rate limit exceeded" };
+      }
+      return { valid: false, error: "Access denied - check GITHUB_TOKEN permissions" };
+    }
+
+    if (!response.ok) {
+      return { valid: false, error: `GitHub API error: ${response.status}` };
+    }
+
+    const data = await response.json();
+    return {
+      valid: true,
+      repoInfo: {
+        name: data.name,
+        fullName: data.full_name,
+        private: data.private,
+        defaultBranch: data.default_branch,
+        cloneUrl: data.clone_url,
+      },
+    };
+  } catch (error) {
+    return { valid: false, error: "Failed to connect to GitHub API" };
+  }
+}
+
 export async function updateCommitStatus(
   repo: Repo,
   commitSha: string,

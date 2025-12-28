@@ -1,6 +1,6 @@
 import { getRepoByRemoteUrl, upsertPipeline, createRun, createStep } from "../db/queries";
 import { validatePipelineConfig, PipelineParseError, shouldTriggerOnPush } from "../pipeline/parser";
-import { updateCommitStatus } from "../lib/github";
+import { updateCommitStatus, verifyGitHubRepo, isGitHubTokenConfigured } from "../lib/github";
 import { getPipelineUrl } from "../lib/utils";
 
 // GitHub webhook payload types
@@ -37,26 +37,35 @@ async function verifySignature(
   signature: string,
   secret: string
 ): Promise<boolean> {
-  const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["verify"]
-  );
+  try {
+    const encoder = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+      "raw",
+      encoder.encode(secret),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["verify"]
+    );
 
-  const signatureParts = signature.split("=");
-  if (signatureParts.length !== 2 || signatureParts[0] !== "sha256") {
+    const signatureParts = signature.split("=");
+    if (signatureParts.length !== 2 || signatureParts[0] !== "sha256") {
+      return false;
+    }
+
+    const sigHex = signatureParts[1];
+    const hexMatch = sigHex.match(/.{1,2}/g);
+    if (!hexMatch) {
+      return false;
+    }
+    const sigBytes = new Uint8Array(
+      hexMatch.map((byte) => parseInt(byte, 16))
+    );
+
+    return await crypto.subtle.verify("HMAC", key, sigBytes, encoder.encode(payload));
+  } catch (error) {
+    console.error("Signature verification error:", error);
     return false;
   }
-
-  const sigHex = signatureParts[1];
-  const sigBytes = new Uint8Array(
-    sigHex.match(/.{1,2}/g)!.map((byte) => parseInt(byte, 16))
-  );
-
-  return crypto.subtle.verify("HMAC", key, sigBytes, encoder.encode(payload));
 }
 
 export async function handleGithubWebhook(req: Request): Promise<Response> {
@@ -204,4 +213,18 @@ export async function handleGithubWebhook(req: Request): Promise<Response> {
       { status: 500 }
     );
   }
+}
+
+export async function handleVerifyGitHubRepo(url: URL): Promise<Response> {
+  const repoUrl = url.searchParams.get("url");
+
+  if (!repoUrl) {
+    return Response.json({ error: "URL parameter required" }, { status: 400 });
+  }
+
+  const result = await verifyGitHubRepo(repoUrl);
+  return Response.json({
+    ...result,
+    tokenConfigured: isGitHubTokenConfigured(),
+  });
 }
