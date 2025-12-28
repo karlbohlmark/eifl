@@ -54,9 +54,13 @@ export async function handlePushTrigger(
     let nextRunAt: Date | undefined;
     if (config.triggers?.schedule && config.triggers.schedule.length > 0) {
       for (const schedule of config.triggers.schedule) {
-        const next = getNextRun(schedule.cron);
-        if (!nextRunAt || next < nextRunAt) {
-          nextRunAt = next;
+        try {
+          const next = getNextRun(schedule.cron);
+          if (!nextRunAt || next < nextRunAt) {
+            nextRunAt = next;
+          }
+        } catch (error) {
+          console.error(`Failed to calculate next run for cron "${schedule.cron}":`, error);
         }
       }
     }

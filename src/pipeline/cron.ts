@@ -1,18 +1,19 @@
 import parser from "cron-parser";
-import { getPipelinesDueForRun, updatePipelineNextRun, createRun, createStep, getRepo } from "../db/queries";
+import { getPipelinesDueForRun, updatePipelineNextRun, createRun, createStep, getRepo, hasPendingOrRunningRun } from "../db/queries";
 import { parsePipelineConfig } from "./parser";
 import { $ } from "bun";
 
 export function getNextRun(cron: string): Date {
   try {
-    const interval = parser.parse(cron);
+    // Use UTC timezone to match database timestamps
+    const interval = parser.parse(cron, {
+      currentDate: new Date(),
+      tz: 'UTC'
+    });
     return interval.next().toDate();
   } catch (err) {
-    console.error(`Error parsing cron expression ${cron}:`, err);
-    // Return a date far in the future to avoid infinite loop of failures
-    const future = new Date();
-    future.setFullYear(future.getFullYear() + 10);
-    return future;
+    console.error(`Error parsing cron expression "${cron}":`, err);
+    throw new Error(`Invalid cron expression: ${cron}`);
   }
 }
 
@@ -43,21 +44,29 @@ export async function processScheduledPipelines() {
       continue;
     }
 
-    // Find the next run time
+    // Find the next run time and update it BEFORE creating the run to prevent race conditions
     if (config.triggers?.schedule && config.triggers.schedule.length > 0) {
       let nextRun: Date | null = null;
       for (const schedule of config.triggers.schedule) {
-        const next = getNextRun(schedule.cron);
-        if (!nextRun || next < nextRun) {
-          nextRun = next;
+        try {
+          const next = getNextRun(schedule.cron);
+          if (!nextRun || next < nextRun) {
+            nextRun = next;
+          }
+        } catch (e) {
+          console.error(`Failed to calculate next run for cron "${schedule.cron}":`, e);
         }
       }
 
       if (nextRun) {
+        // Update next_run_at BEFORE creating the run to prevent duplicate runs
         updatePipelineNextRun(pipeline.id, nextRun);
+      } else {
+        console.warn(`No valid cron schedule found for pipeline ${pipeline.name}`);
+        continue;
       }
     } else {
-        continue;
+      continue;
     }
 
     // Create run
@@ -73,14 +82,21 @@ export async function processScheduledPipelines() {
       continue;
     }
 
-    try {
-        const run = createRun(pipeline.id, commitSha, repo.default_branch, "schedule");
+    // Check if there's already a pending or running run to prevent duplicate runs
+    if (hasPendingOrRunningRun(pipeline.id)) {
+      console.log(`Skipping scheduled run for pipeline "${config.name}" (${pipeline.id}) - already has a pending/running run`);
+      continue;
+    }
 
-        for (const step of config.steps) {
-          createStep(run.id, step.name, step.run);
-        }
+    try {
+      const run = createRun(pipeline.id, commitSha, repo.default_branch, "schedule");
+      console.log(`Created scheduled run ${run.id} for pipeline "${config.name}" (${pipeline.id})`);
+
+      for (const step of config.steps) {
+        createStep(run.id, step.name, step.run);
+      }
     } catch (e) {
-        console.error("Error creating run:", e);
+      console.error(`Error creating run for pipeline ${pipeline.name}:`, e);
     }
   }
 }

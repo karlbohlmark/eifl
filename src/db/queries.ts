@@ -157,6 +157,12 @@ export function updateRunStatus(id: number, status: RunStatus): void {
   }
 }
 
+export function hasPendingOrRunningRun(pipelineId: number): boolean {
+  const db = getDb();
+  const result = db.query("SELECT COUNT(*) as count FROM runs WHERE pipeline_id = ? AND status IN ('pending', 'running')").get(pipelineId) as { count: number };
+  return result.count > 0;
+}
+
 export function getPendingRuns(): Run[] {
   const db = getDb();
   return db.query("SELECT * FROM runs WHERE status = 'pending' ORDER BY created_at ASC").all() as Run[];

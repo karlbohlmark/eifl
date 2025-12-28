@@ -106,8 +106,10 @@ function initSchema(db: Database) {
     CREATE INDEX IF NOT EXISTS idx_repos_project ON repos(project_id);
     CREATE INDEX IF NOT EXISTS idx_repos_remote_url ON repos(remote_url);
     CREATE INDEX IF NOT EXISTS idx_pipelines_repo ON pipelines(repo_id);
+    CREATE INDEX IF NOT EXISTS idx_pipelines_next_run ON pipelines(next_run_at);
     CREATE INDEX IF NOT EXISTS idx_runs_pipeline ON runs(pipeline_id);
     CREATE INDEX IF NOT EXISTS idx_runs_status ON runs(status);
+    CREATE INDEX IF NOT EXISTS idx_runs_pipeline_status ON runs(pipeline_id, status);
     CREATE INDEX IF NOT EXISTS idx_steps_run ON steps(run_id);
     CREATE INDEX IF NOT EXISTS idx_metrics_run ON metrics(run_id);
     CREATE INDEX IF NOT EXISTS idx_metrics_key ON metrics(key);
@@ -138,8 +140,8 @@ function initSchema(db: Database) {
     const hasNextRunAtColumn = pipelineTableInfo.some((column) => column.name === "next_run_at");
 
     if (!hasNextRunAtColumn) {
-        console.log("Migrating database: adding next_run_at to pipelines table");
-        db.exec("ALTER TABLE pipelines ADD COLUMN next_run_at TEXT");
+      console.log("Migrating database: adding next_run_at to pipelines table");
+      db.exec("ALTER TABLE pipelines ADD COLUMN next_run_at TEXT");
     }
   } catch (error) {
     console.error("Migration check failed:", error);
