@@ -35,8 +35,6 @@ export async function processScheduledPipelines() {
   const duePipelines = getPipelinesDueForRun();
 
   for (const pipeline of duePipelines) {
-    // console.log(`Processing scheduled run for pipeline ${pipeline.name} (id: ${pipeline.id})`);
-
     let config;
     try {
       config = parsePipelineConfig(pipeline.config);
@@ -77,7 +75,6 @@ export async function processScheduledPipelines() {
 
     try {
         const run = createRun(pipeline.id, commitSha, repo.default_branch, "schedule");
-        // console.log(`Created scheduled run: ${run.id} for pipeline ${pipeline.name}`);
 
         for (const step of config.steps) {
           createStep(run.id, step.name, step.run);
