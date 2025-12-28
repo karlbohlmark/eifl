@@ -2,6 +2,7 @@ import { getRepoByPath, getPipelines, upsertPipeline, createRun, createStep } fr
 import { getPipelineConfig } from "../git/browse";
 import { parsePipelineConfig, shouldTriggerOnPush, type PipelineConfig } from "./parser";
 import type { PushInfo } from "../git/http";
+import { getNextRun } from "./cron";
 
 export async function handlePushTrigger(
   repoPath: string,
@@ -49,8 +50,19 @@ export async function handlePushTrigger(
       continue;
     }
 
+    // Calculate next run time if schedule exists
+    let nextRunAt: Date | undefined;
+    if (config.triggers?.schedule && config.triggers.schedule.length > 0) {
+      for (const schedule of config.triggers.schedule) {
+        const next = getNextRun(schedule.cron);
+        if (!nextRunAt || next < nextRunAt) {
+          nextRunAt = next;
+        }
+      }
+    }
+
     // Upsert pipeline configuration
-    const pipeline = upsertPipeline(repo.id, config.name, configJson);
+    const pipeline = upsertPipeline(repo.id, config.name, configJson, nextRunAt);
     console.log(`Updated pipeline: ${config.name} (id: ${pipeline.id})`);
 
     // Create a new run

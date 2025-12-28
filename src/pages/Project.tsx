@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Plus, GitBranch, ArrowLeft, Copy, Check, Github } from "lucide-react";
 import { GitHubRepoForm } from "@/components/GitHubRepoForm";
+import { SecretsManager } from "@/components/SecretsManager";
 
 interface Project {
   id: number;
@@ -238,6 +239,17 @@ export function Project() {
           ))}
         </div>
       )}
+
+      <div className="mt-8">
+        <SecretsManager
+          scope="project"
+          scopeId={parseInt(id!)}
+          title="Project Secrets"
+        />
+        <p className="text-sm text-muted-foreground mt-2">
+          Project secrets are available to all repositories in this project.
+        </p>
+      </div>
     </div>
   );
 }

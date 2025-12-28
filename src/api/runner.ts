@@ -5,6 +5,8 @@ import {
   getRunnerByToken,
   updateRunnerStatus,
   updateRunnerHeartbeat,
+  updateRunnerTags,
+  getRunnerTags,
   deleteRunner,
   getPendingRuns,
   getRun,
@@ -15,27 +17,54 @@ import {
   createMetric,
   getPipeline,
   getRepo,
+  getSecretsForRepo,
 } from "../db/queries";
 import { updateCommitStatus } from "../lib/github";
 import { getPipelineUrl } from "../lib/utils";
+import { decryptSecret, isEncryptionConfigured } from "../lib/crypto";
 import type { Run, Step, Runner } from "../db/schema";
 
 // Runner management
 export async function handleCreateRunner(req: Request): Promise<Response> {
-  const body = await req.json() as { name: string };
+  const body = await req.json() as { name: string; tags?: string[] };
 
   if (!body.name || typeof body.name !== "string") {
     return Response.json({ error: "Name is required" }, { status: 400 });
   }
 
-  const runner = createRunner(body.name);
+  // Validate tags if provided
+  const tags = body.tags ?? [];
+  if (!Array.isArray(tags) || !tags.every(t => typeof t === "string")) {
+    return Response.json({ error: "Tags must be an array of strings" }, { status: 400 });
+  }
+
+  const runner = createRunner(body.name, tags);
   return Response.json(runner, { status: 201 });
+}
+
+export async function handleUpdateRunnerTags(id: number, req: Request): Promise<Response> {
+  const body = await req.json() as { tags: string[] };
+
+  if (!Array.isArray(body.tags) || !body.tags.every(t => typeof t === "string")) {
+    return Response.json({ error: "Tags must be an array of strings" }, { status: 400 });
+  }
+
+  const success = updateRunnerTags(id, body.tags);
+  if (!success) {
+    return Response.json({ error: "Runner not found" }, { status: 404 });
+  }
+
+  const runner = getRunner(id);
+  return Response.json(runner);
 }
 
 export function handleGetRunners(): Response {
   const runners = getRunners();
-  // Don't expose tokens in list
-  const safeRunners = runners.map(({ token, ...r }) => r);
+  // Don't expose tokens in list, parse tags to array
+  const safeRunners = runners.map(({ token, tags, ...r }) => ({
+    ...r,
+    tags: getRunnerTags({ token, tags, ...r } as Runner),
+  }));
   return Response.json(safeRunners);
 }
 
@@ -66,11 +95,24 @@ export interface JobPayload {
   commitSha: string | null;
   branch: string | null;
   pipelineConfig: object;
+  secrets: Record<string, string>;
 }
 
-export function handlePollForJob(runner: Runner): Response {
+// Check if runner has all required tags for a pipeline
+function runnerMatchesTags(runnerTags: string[], requiredTags?: string[]): boolean {
+  if (!requiredTags || requiredTags.length === 0) {
+    return true; // No tags required, any runner can run this
+  }
+  // Runner must have ALL required tags
+  return requiredTags.every(tag => runnerTags.includes(tag));
+}
+
+export async function handlePollForJob(runner: Runner): Promise<Response> {
   // Update heartbeat
   updateRunnerHeartbeat(runner.id);
+
+  // Get runner's tags
+  const runnerTags = getRunnerTags(runner);
 
   // Find pending runs
   const pendingRuns = getPendingRuns();
@@ -78,17 +120,36 @@ export function handlePollForJob(runner: Runner): Response {
     return Response.json({ job: null });
   }
 
-  // Pick the first pending run
-  const run = pendingRuns[0];
-  const pipeline = getPipeline(run.pipeline_id);
-  if (!pipeline) {
+  // Find the first pending run that matches this runner's tags
+  let matchedRun: Run | null = null;
+  let matchedPipeline: ReturnType<typeof getPipeline> = null;
+  let matchedRepo: ReturnType<typeof getRepo> = null;
+
+  for (const run of pendingRuns) {
+    const pipeline = getPipeline(run.pipeline_id);
+    if (!pipeline) continue;
+
+    const pipelineConfig = JSON.parse(pipeline.config);
+    const requiredTags = pipelineConfig.runner_tags as string[] | undefined;
+
+    if (runnerMatchesTags(runnerTags, requiredTags)) {
+      const repo = getRepo(pipeline.repo_id);
+      if (repo) {
+        matchedRun = run;
+        matchedPipeline = pipeline;
+        matchedRepo = repo;
+        break;
+      }
+    }
+  }
+
+  if (!matchedRun || !matchedPipeline || !matchedRepo) {
     return Response.json({ job: null });
   }
 
-  const repo = getRepo(pipeline.repo_id);
-  if (!repo) {
-    return Response.json({ job: null });
-  }
+  const run = matchedRun;
+  const pipeline = matchedPipeline;
+  const repo = matchedRepo;
 
   // Mark runner as busy and run as running
   updateRunnerStatus(runner.id, "busy");
@@ -122,6 +183,19 @@ export function handlePollForJob(runner: Runner): Response {
     }
   }
 
+  // Decrypt secrets for this repo
+  const secrets: Record<string, string> = {};
+  if (isEncryptionConfigured()) {
+    const encryptedSecrets = getSecretsForRepo(repo.id);
+    for (const secret of encryptedSecrets) {
+      try {
+        secrets[secret.name] = await decryptSecret(secret.encrypted_value, secret.iv);
+      } catch (e) {
+        console.error(`Failed to decrypt secret ${secret.name}:`, e);
+      }
+    }
+  }
+
   const job: JobPayload = {
     run,
     steps,
@@ -129,6 +203,7 @@ export function handlePollForJob(runner: Runner): Response {
     commitSha: run.commit_sha,
     branch: run.branch,
     pipelineConfig,
+    secrets,
   };
 
   return Response.json({ job });

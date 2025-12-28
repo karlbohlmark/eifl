@@ -1,4 +1,4 @@
-import { getDb, type Project, type Repo, type Pipeline, type Run, type Step, type Metric, type Runner, type RunStatus, type StepStatus, type RunnerStatus } from "./schema";
+import { getDb, type Project, type Repo, type Pipeline, type Run, type Step, type Metric, type Runner, type Secret, type RunStatus, type StepStatus, type RunnerStatus, type SecretScope } from "./schema";
 
 // Projects
 export function createProject(name: string, description?: string): Project {
@@ -68,15 +68,27 @@ export function createPipeline(repoId: number, name: string, config: object): Pi
   return stmt.get(repoId, name, JSON.stringify(config)) as Pipeline;
 }
 
-export function upsertPipeline(repoId: number, name: string, config: object): Pipeline {
+export function upsertPipeline(repoId: number, name: string, config: object, nextRunAt?: Date): Pipeline {
   const db = getDb();
   const configJson = JSON.stringify(config);
+  const nextRunAtStr = nextRunAt ? nextRunAt.toISOString() : null;
   const stmt = db.prepare(`
-    INSERT INTO pipelines (repo_id, name, config) VALUES (?, ?, ?)
-    ON CONFLICT(repo_id, name) DO UPDATE SET config = excluded.config
+    INSERT INTO pipelines (repo_id, name, config, next_run_at) VALUES (?, ?, ?, ?)
+    ON CONFLICT(repo_id, name) DO UPDATE SET config = excluded.config, next_run_at = excluded.next_run_at
     RETURNING *
   `);
-  return stmt.get(repoId, name, configJson) as Pipeline;
+  return stmt.get(repoId, name, configJson, nextRunAtStr) as Pipeline;
+}
+
+export function updatePipelineNextRun(id: number, nextRunAt: Date): void {
+  const db = getDb();
+  db.run("UPDATE pipelines SET next_run_at = ? WHERE id = ?", [nextRunAt.toISOString(), id]);
+}
+
+export function getPipelinesDueForRun(): Pipeline[] {
+  const db = getDb();
+  // We use ISO string for next_run_at (from JS Date.toISOString()), so we need to compare with ISO string from SQLite
+  return db.query("SELECT * FROM pipelines WHERE next_run_at IS NOT NULL AND next_run_at <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now')").all() as Pipeline[];
 }
 
 export interface PipelineWithLatestRun extends Pipeline {
@@ -206,11 +218,27 @@ export function getMetricHistory(pipelineId: number, key: string, limit = 100): 
 }
 
 // Runners
-export function createRunner(name: string): Runner {
+export function createRunner(name: string, tags: string[] = []): Runner {
   const db = getDb();
   const token = crypto.randomUUID();
-  const stmt = db.prepare("INSERT INTO runners (name, token) VALUES (?, ?) RETURNING *");
-  return stmt.get(name, token) as Runner;
+  const tagsJson = JSON.stringify(tags);
+  const stmt = db.prepare("INSERT INTO runners (name, token, tags) VALUES (?, ?, ?) RETURNING *");
+  return stmt.get(name, token, tagsJson) as Runner;
+}
+
+export function updateRunnerTags(id: number, tags: string[]): boolean {
+  const db = getDb();
+  const tagsJson = JSON.stringify(tags);
+  const result = db.run("UPDATE runners SET tags = ? WHERE id = ?", [tagsJson, id]);
+  return result.changes > 0;
+}
+
+export function getRunnerTags(runner: Runner): string[] {
+  try {
+    return JSON.parse(runner.tags || '[]');
+  } catch {
+    return [];
+  }
 }
 
 export function getRunners(): Runner[] {
@@ -242,4 +270,87 @@ export function deleteRunner(id: number): boolean {
   const db = getDb();
   const result = db.run("DELETE FROM runners WHERE id = ?", [id]);
   return result.changes > 0;
+}
+
+// Secrets
+export function createSecret(
+  scope: SecretScope,
+  scopeId: number,
+  name: string,
+  encryptedValue: string,
+  iv: string
+): Secret {
+  const db = getDb();
+  const stmt = db.prepare(`
+    INSERT INTO secrets (scope, scope_id, name, encrypted_value, iv)
+    VALUES (?, ?, ?, ?, ?)
+    RETURNING *
+  `);
+  return stmt.get(scope, scopeId, name, encryptedValue, iv) as Secret;
+}
+
+export function upsertSecret(
+  scope: SecretScope,
+  scopeId: number,
+  name: string,
+  encryptedValue: string,
+  iv: string
+): Secret {
+  const db = getDb();
+  const stmt = db.prepare(`
+    INSERT INTO secrets (scope, scope_id, name, encrypted_value, iv)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(scope, scope_id, name) DO UPDATE SET
+      encrypted_value = excluded.encrypted_value,
+      iv = excluded.iv,
+      updated_at = datetime('now') || 'Z'
+    RETURNING *
+  `);
+  return stmt.get(scope, scopeId, name, encryptedValue, iv) as Secret;
+}
+
+export function getSecrets(scope: SecretScope, scopeId: number): Secret[] {
+  const db = getDb();
+  return db.query(
+    "SELECT * FROM secrets WHERE scope = ? AND scope_id = ? ORDER BY name"
+  ).all(scope, scopeId) as Secret[];
+}
+
+export function getSecret(scope: SecretScope, scopeId: number, name: string): Secret | null {
+  const db = getDb();
+  return db.query(
+    "SELECT * FROM secrets WHERE scope = ? AND scope_id = ? AND name = ?"
+  ).get(scope, scopeId, name) as Secret | null;
+}
+
+export function deleteSecret(scope: SecretScope, scopeId: number, name: string): boolean {
+  const db = getDb();
+  const result = db.run(
+    "DELETE FROM secrets WHERE scope = ? AND scope_id = ? AND name = ?",
+    [scope, scopeId, name]
+  );
+  return result.changes > 0;
+}
+
+// Get merged secrets for a repo (project secrets + repo secrets, repo overrides project)
+export function getSecretsForRepo(repoId: number): Secret[] {
+  const db = getDb();
+  // First get the project_id for this repo
+  const repo = db.query("SELECT project_id FROM repos WHERE id = ?").get(repoId) as { project_id: number } | null;
+  if (!repo) return [];
+
+  // Get project and repo secrets separately, then merge in code
+  const projectSecrets = getSecrets("project", repo.project_id);
+  const repoSecrets = getSecrets("repo", repoId);
+
+  // Create a map with project secrets first, then override with repo secrets
+  const merged = new Map<string, Secret>();
+  for (const secret of projectSecrets) {
+    merged.set(secret.name, secret);
+  }
+  for (const secret of repoSecrets) {
+    merged.set(secret.name, secret); // Repo secrets override project secrets
+  }
+
+  return Array.from(merged.values()).sort((a, b) => a.name.localeCompare(b.name));
 }

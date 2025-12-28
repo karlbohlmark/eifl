@@ -24,8 +24,10 @@ import {
   XCircle,
   Github,
   ExternalLink,
+  Key,
 } from "lucide-react";
 import { formatRelativeTime } from "../lib/utils";
+import { SecretsManager } from "@/components/SecretsManager";
 
 interface Repo {
   id: number;
@@ -81,7 +83,7 @@ export function Repo() {
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [fileContent, setFileContent] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<"files" | "commits" | "pipelines">("files");
+  const [tab, setTab] = useState<"files" | "commits" | "pipelines" | "secrets">("files");
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -325,6 +327,13 @@ export function Repo() {
           <Play className="w-4 h-4 mr-2" />
           Pipelines
         </Button>
+        <Button
+          variant={tab === "secrets" ? "default" : "outline"}
+          onClick={() => setTab("secrets")}
+        >
+          <Key className="w-4 h-4 mr-2" />
+          Secrets
+        </Button>
         {repo.remote_url && (
           <a
             href={repo.remote_url.replace(/\.git$/, "")}
@@ -482,6 +491,19 @@ git push -u origin main`}
               </Card>
             ))
           )}
+        </div>
+      )}
+
+      {tab === "secrets" && (
+        <div>
+          <SecretsManager
+            scope="repo"
+            scopeId={parseInt(id!)}
+            title="Repository Secrets"
+          />
+          <p className="text-sm text-muted-foreground mt-2">
+            Repository secrets override project secrets with the same name.
+          </p>
         </div>
       )}
     </div>

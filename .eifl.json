@@ -1,0 +1,31 @@
+{
+  "name": "eifl",
+  "triggers": {
+    "push": {
+      "branches": ["main", "feature/*"]
+    },
+    "manual": true
+  },
+  "steps": [
+    {
+      "name": "install",
+      "run": "bun install --frozen-lockfile"
+    },
+    {
+      "name": "typecheck",
+      "run": "bun x tsc --noEmit"
+    },
+    {
+      "name": "test",
+      "run": "bun test"
+    },
+    {
+      "name": "build",
+      "run": "bun run build",
+      "capture_sizes": [
+        "dist/*.js",
+        "dist/*.css"
+      ]
+    }
+  ]
+}

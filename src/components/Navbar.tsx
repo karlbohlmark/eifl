@@ -7,7 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ChevronRight, Home, FolderKanban } from "lucide-react";
+import { ChevronRight, Home, FolderKanban, Server } from "lucide-react";
 
 interface Project {
   id: number;
@@ -162,29 +162,38 @@ export function Navbar() {
           )}
         </div>
 
-        {/* Quick Project Switcher */}
-        <div className="flex items-center gap-2">
-          <FolderKanban className="w-4 h-4 text-muted-foreground" />
-          <Select
-            value={currentProjectId || ""}
-            onValueChange={handleProjectChange}
+        {/* Quick Project Switcher and Runners Link */}
+        <div className="flex items-center gap-4">
+          <Link
+            to="/runners"
+            className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
           >
-            <SelectTrigger className="w-[180px]" size="sm">
-              <SelectValue placeholder="Switch project..." />
-            </SelectTrigger>
-            <SelectContent>
-              {projects.map((project) => (
-                <SelectItem key={project.id} value={project.id.toString()}>
-                  {project.name}
-                </SelectItem>
-              ))}
-              {projects.length === 0 && !loading && (
-                <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                  No projects
-                </div>
-              )}
-            </SelectContent>
-          </Select>
+            <Server className="w-4 h-4" />
+            <span className="hidden sm:inline">Runners</span>
+          </Link>
+          <div className="flex items-center gap-2">
+            <FolderKanban className="w-4 h-4 text-muted-foreground" />
+            <Select
+              value={currentProjectId || ""}
+              onValueChange={handleProjectChange}
+            >
+              <SelectTrigger className="w-[180px]" size="sm">
+                <SelectValue placeholder="Switch project..." />
+              </SelectTrigger>
+              <SelectContent>
+                {projects.map((project) => (
+                  <SelectItem key={project.id} value={project.id.toString()}>
+                    {project.name}
+                  </SelectItem>
+                ))}
+                {projects.length === 0 && !loading && (
+                  <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                    No projects
+                  </div>
+                )}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </div>
     </nav>

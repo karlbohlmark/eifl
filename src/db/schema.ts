@@ -43,6 +43,7 @@ function initSchema(db: Database) {
       repo_id INTEGER NOT NULL REFERENCES repos(id) ON DELETE CASCADE,
       name TEXT NOT NULL,
       config TEXT NOT NULL,
+      next_run_at TEXT,
       created_at TEXT DEFAULT (datetime('now') || 'Z'),
       UNIQUE(repo_id, name)
     );
@@ -85,8 +86,21 @@ function initSchema(db: Database) {
       name TEXT NOT NULL UNIQUE,
       token TEXT NOT NULL UNIQUE,
       status TEXT NOT NULL DEFAULT 'offline',
+      tags TEXT DEFAULT '[]',
       last_seen TEXT,
       created_at TEXT DEFAULT (datetime('now') || 'Z')
+    );
+
+    CREATE TABLE IF NOT EXISTS secrets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      scope TEXT NOT NULL,
+      scope_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      encrypted_value TEXT NOT NULL,
+      iv TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now') || 'Z'),
+      updated_at TEXT DEFAULT (datetime('now') || 'Z'),
+      UNIQUE(scope, scope_id, name)
     );
 
     CREATE INDEX IF NOT EXISTS idx_repos_project ON repos(project_id);
@@ -97,6 +111,7 @@ function initSchema(db: Database) {
     CREATE INDEX IF NOT EXISTS idx_steps_run ON steps(run_id);
     CREATE INDEX IF NOT EXISTS idx_metrics_run ON metrics(run_id);
     CREATE INDEX IF NOT EXISTS idx_metrics_key ON metrics(key);
+    CREATE INDEX IF NOT EXISTS idx_secrets_scope ON secrets(scope, scope_id);
   `);
 
   // Migrations
@@ -108,6 +123,23 @@ function initSchema(db: Database) {
     if (!hasRemoteUrlColumn) {
       console.log("Migrating database: adding remote_url to repos table");
       db.exec("ALTER TABLE repos ADD COLUMN remote_url TEXT");
+    }
+
+    // Check if tags column exists on runners table
+    const runnerTableInfo = db.prepare("PRAGMA table_info(runners);").all() as { name: string }[];
+    const hasTagsColumn = runnerTableInfo.some((column) => column.name === "tags");
+
+    if (!hasTagsColumn) {
+      console.log("Migrating database: adding tags to runners table");
+      db.exec("ALTER TABLE runners ADD COLUMN tags TEXT DEFAULT '[]'");
+    }
+
+    const pipelineTableInfo = db.prepare("PRAGMA table_info(pipelines);").all() as { name: string }[];
+    const hasNextRunAtColumn = pipelineTableInfo.some((column) => column.name === "next_run_at");
+
+    if (!hasNextRunAtColumn) {
+        console.log("Migrating database: adding next_run_at to pipelines table");
+        db.exec("ALTER TABLE pipelines ADD COLUMN next_run_at TEXT");
     }
   } catch (error) {
     console.error("Migration check failed:", error);
@@ -137,6 +169,7 @@ export interface Pipeline {
   repo_id: number;
   name: string;
   config: string;
+  next_run_at: string | null;
   created_at: string;
 }
 
@@ -184,6 +217,25 @@ export interface Runner {
   name: string;
   token: string;
   status: RunnerStatus;
+  tags: string; // JSON array of tag strings
   last_seen: string | null;
   created_at: string;
+}
+
+// Parsed runner with tags as array
+export interface RunnerWithParsedTags extends Omit<Runner, 'tags'> {
+  tags: string[];
+}
+
+export type SecretScope = "project" | "repo";
+
+export interface Secret {
+  id: number;
+  scope: SecretScope;
+  scope_id: number;
+  name: string;
+  encrypted_value: string;
+  iv: string;
+  created_at: string;
+  updated_at: string;
 }

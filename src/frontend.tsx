@@ -12,6 +12,7 @@ import { Dashboard } from "./pages/Dashboard";
 import { Project } from "./pages/Project";
 import { Repo } from "./pages/Repo";
 import { PipelineView } from "./pages/Pipeline";
+import { Runners } from "./pages/Runners";
 import { Navbar } from "./components/Navbar";
 import "./index.css";
 
@@ -25,6 +26,7 @@ function App() {
           <Route path="/project/:id" element={<Project />} />
           <Route path="/repo/:id" element={<Repo />} />
           <Route path="/pipeline/:id" element={<PipelineView />} />
+          <Route path="/runners" element={<Runners />} />
         </Routes>
       </div>
     </BrowserRouter>
