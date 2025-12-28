@@ -17,9 +17,11 @@ import {
   createMetric,
   getPipeline,
   getRepo,
+  getSecretsForRepo,
 } from "../db/queries";
 import { updateCommitStatus } from "../lib/github";
 import { getPipelineUrl } from "../lib/utils";
+import { decryptSecret, isEncryptionConfigured } from "../lib/crypto";
 import type { Run, Step, Runner } from "../db/schema";
 
 // Runner management
@@ -93,6 +95,7 @@ export interface JobPayload {
   commitSha: string | null;
   branch: string | null;
   pipelineConfig: object;
+  secrets: Record<string, string>;
 }
 
 // Check if runner has all required tags for a pipeline
@@ -104,7 +107,7 @@ function runnerMatchesTags(runnerTags: string[], requiredTags?: string[]): boole
   return requiredTags.every(tag => runnerTags.includes(tag));
 }
 
-export function handlePollForJob(runner: Runner): Response {
+export async function handlePollForJob(runner: Runner): Promise<Response> {
   // Update heartbeat
   updateRunnerHeartbeat(runner.id);
 
@@ -180,6 +183,19 @@ export function handlePollForJob(runner: Runner): Response {
     }
   }
 
+  // Decrypt secrets for this repo
+  const secrets: Record<string, string> = {};
+  if (isEncryptionConfigured()) {
+    const encryptedSecrets = getSecretsForRepo(repo.id);
+    for (const secret of encryptedSecrets) {
+      try {
+        secrets[secret.name] = await decryptSecret(secret.encrypted_value, secret.iv);
+      } catch (e) {
+        console.error(`Failed to decrypt secret ${secret.name}:`, e);
+      }
+    }
+  }
+
   const job: JobPayload = {
     run,
     steps,
@@ -187,6 +203,7 @@ export function handlePollForJob(runner: Runner): Response {
     commitSha: run.commit_sha,
     branch: run.branch,
     pipelineConfig,
+    secrets,
   };
 
   return Response.json({ job });

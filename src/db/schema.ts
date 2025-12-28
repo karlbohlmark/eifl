@@ -90,6 +90,18 @@ function initSchema(db: Database) {
       created_at TEXT DEFAULT (datetime('now') || 'Z')
     );
 
+    CREATE TABLE IF NOT EXISTS secrets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      scope TEXT NOT NULL,
+      scope_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      encrypted_value TEXT NOT NULL,
+      iv TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now') || 'Z'),
+      updated_at TEXT DEFAULT (datetime('now') || 'Z'),
+      UNIQUE(scope, scope_id, name)
+    );
+
     CREATE INDEX IF NOT EXISTS idx_repos_project ON repos(project_id);
     CREATE INDEX IF NOT EXISTS idx_repos_remote_url ON repos(remote_url);
     CREATE INDEX IF NOT EXISTS idx_pipelines_repo ON pipelines(repo_id);
@@ -98,6 +110,7 @@ function initSchema(db: Database) {
     CREATE INDEX IF NOT EXISTS idx_steps_run ON steps(run_id);
     CREATE INDEX IF NOT EXISTS idx_metrics_run ON metrics(run_id);
     CREATE INDEX IF NOT EXISTS idx_metrics_key ON metrics(key);
+    CREATE INDEX IF NOT EXISTS idx_secrets_scope ON secrets(scope, scope_id);
   `);
 
   // Migrations
@@ -202,4 +215,17 @@ export interface Runner {
 // Parsed runner with tags as array
 export interface RunnerWithParsedTags extends Omit<Runner, 'tags'> {
   tags: string[];
+}
+
+export type SecretScope = "project" | "repo";
+
+export interface Secret {
+  id: number;
+  scope: SecretScope;
+  scope_id: number;
+  name: string;
+  encrypted_value: string;
+  iv: string;
+  created_at: string;
+  updated_at: string;
 }

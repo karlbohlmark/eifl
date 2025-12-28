@@ -16,6 +16,7 @@ export interface JobPayload {
       capture_sizes?: string[];
     }>;
   };
+  secrets: Record<string, string>;
 }
 
 export interface ExecutorCallbacks {
@@ -100,8 +101,8 @@ export async function executeJob(
       let exitCode = 0;
 
       try {
-        // Execute the command
-        const result = await executeCommand(step.command, workDir, (chunk) => {
+        // Execute the command with secrets injected as env vars
+        const result = await executeCommand(step.command, workDir, job.secrets, (chunk) => {
           output += chunk;
           process.stdout.write(chunk);
           // Stream output in chunks
@@ -171,6 +172,7 @@ export async function executeJob(
 async function executeCommand(
   command: string,
   cwd: string,
+  secrets: Record<string, string>,
   onOutput: (chunk: string) => void
 ): Promise<{ exitCode: number; output: string }> {
   const proc = Bun.spawn(["sh", "-c", command], {
@@ -179,6 +181,7 @@ async function executeCommand(
     stderr: "pipe",
     env: {
       ...process.env,
+      ...secrets, // Inject secrets as environment variables
       CI: "true",
       EIFL: "true",
     },

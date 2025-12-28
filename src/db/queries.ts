@@ -1,4 +1,4 @@
-import { getDb, type Project, type Repo, type Pipeline, type Run, type Step, type Metric, type Runner, type RunStatus, type StepStatus, type RunnerStatus } from "./schema";
+import { getDb, type Project, type Repo, type Pipeline, type Run, type Step, type Metric, type Runner, type Secret, type RunStatus, type StepStatus, type RunnerStatus, type SecretScope } from "./schema";
 
 // Projects
 export function createProject(name: string, description?: string): Project {
@@ -258,4 +258,87 @@ export function deleteRunner(id: number): boolean {
   const db = getDb();
   const result = db.run("DELETE FROM runners WHERE id = ?", [id]);
   return result.changes > 0;
+}
+
+// Secrets
+export function createSecret(
+  scope: SecretScope,
+  scopeId: number,
+  name: string,
+  encryptedValue: string,
+  iv: string
+): Secret {
+  const db = getDb();
+  const stmt = db.prepare(`
+    INSERT INTO secrets (scope, scope_id, name, encrypted_value, iv)
+    VALUES (?, ?, ?, ?, ?)
+    RETURNING *
+  `);
+  return stmt.get(scope, scopeId, name, encryptedValue, iv) as Secret;
+}
+
+export function upsertSecret(
+  scope: SecretScope,
+  scopeId: number,
+  name: string,
+  encryptedValue: string,
+  iv: string
+): Secret {
+  const db = getDb();
+  const stmt = db.prepare(`
+    INSERT INTO secrets (scope, scope_id, name, encrypted_value, iv)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(scope, scope_id, name) DO UPDATE SET
+      encrypted_value = excluded.encrypted_value,
+      iv = excluded.iv,
+      updated_at = datetime('now') || 'Z'
+    RETURNING *
+  `);
+  return stmt.get(scope, scopeId, name, encryptedValue, iv) as Secret;
+}
+
+export function getSecrets(scope: SecretScope, scopeId: number): Secret[] {
+  const db = getDb();
+  return db.query(
+    "SELECT * FROM secrets WHERE scope = ? AND scope_id = ? ORDER BY name"
+  ).all(scope, scopeId) as Secret[];
+}
+
+export function getSecret(scope: SecretScope, scopeId: number, name: string): Secret | null {
+  const db = getDb();
+  return db.query(
+    "SELECT * FROM secrets WHERE scope = ? AND scope_id = ? AND name = ?"
+  ).get(scope, scopeId, name) as Secret | null;
+}
+
+export function deleteSecret(scope: SecretScope, scopeId: number, name: string): boolean {
+  const db = getDb();
+  const result = db.run(
+    "DELETE FROM secrets WHERE scope = ? AND scope_id = ? AND name = ?",
+    [scope, scopeId, name]
+  );
+  return result.changes > 0;
+}
+
+// Get merged secrets for a repo (project secrets + repo secrets, repo overrides project)
+export function getSecretsForRepo(repoId: number): Secret[] {
+  const db = getDb();
+  // First get the project_id for this repo
+  const repo = db.query("SELECT project_id FROM repos WHERE id = ?").get(repoId) as { project_id: number } | null;
+  if (!repo) return [];
+
+  // Get project and repo secrets separately, then merge in code
+  const projectSecrets = getSecrets("project", repo.project_id);
+  const repoSecrets = getSecrets("repo", repoId);
+
+  // Create a map with project secrets first, then override with repo secrets
+  const merged = new Map<string, Secret>();
+  for (const secret of projectSecrets) {
+    merged.set(secret.name, secret);
+  }
+  for (const secret of repoSecrets) {
+    merged.set(secret.name, secret); // Repo secrets override project secrets
+  }
+
+  return Array.from(merged.values()).sort((a, b) => a.name.localeCompare(b.name));
 }

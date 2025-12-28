@@ -46,6 +46,14 @@ import {
   handleRunnerHeartbeat,
 } from "./api/runner";
 import { handleGithubWebhook, handleVerifyGitHubRepo } from "./api/github";
+import {
+  handleGetProjectSecrets,
+  handleCreateProjectSecret,
+  handleDeleteProjectSecret,
+  handleGetRepoSecrets,
+  handleCreateRepoSecret,
+  handleDeleteRepoSecret,
+} from "./api/secrets";
 
 // Initialize database on startup
 getDb();
@@ -166,6 +174,21 @@ async function handleApiRequest(
     if (method === "POST") return handleCreateRepo(projectId, req);
   }
 
+  // Project secrets
+  const projectSecretsMatch = path.match(/^projects\/(\d+)\/secrets$/);
+  if (projectSecretsMatch) {
+    const projectId = parseInt(projectSecretsMatch[1]);
+    if (method === "GET") return handleGetProjectSecrets(projectId);
+    if (method === "POST") return handleCreateProjectSecret(projectId, req);
+  }
+
+  const projectSecretMatch = path.match(/^projects\/(\d+)\/secrets\/([^/]+)$/);
+  if (projectSecretMatch && method === "DELETE") {
+    const projectId = parseInt(projectSecretMatch[1]);
+    const name = decodeURIComponent(projectSecretMatch[2]);
+    return handleDeleteProjectSecret(projectId, name);
+  }
+
   // Repos
   const repoMatch = path.match(/^repos\/(\d+)$/);
   if (repoMatch) {
@@ -208,6 +231,21 @@ async function handleApiRequest(
     const id = parseInt(repoCommitMatch[1]);
     const sha = decodeURIComponent(repoCommitMatch[2]);
     return handleGetCommit(id, sha);
+  }
+
+  // Repo secrets
+  const repoSecretsMatch = path.match(/^repos\/(\d+)\/secrets$/);
+  if (repoSecretsMatch) {
+    const repoId = parseInt(repoSecretsMatch[1]);
+    if (method === "GET") return handleGetRepoSecrets(repoId);
+    if (method === "POST") return handleCreateRepoSecret(repoId, req);
+  }
+
+  const repoSecretMatch = path.match(/^repos\/(\d+)\/secrets\/([^/]+)$/);
+  if (repoSecretMatch && method === "DELETE") {
+    const repoId = parseInt(repoSecretMatch[1]);
+    const name = decodeURIComponent(repoSecretMatch[2]);
+    return handleDeleteRepoSecret(repoId, name);
   }
 
   // Pipelines
