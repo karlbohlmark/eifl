@@ -16,8 +16,8 @@ export const collectMetrics = {
     let match;
     while ((match = regex.exec(output)) !== null) {
       metrics.push({
-        key: match[1],
-        value: parseFloat(match[2]),
+        key: match[1]!,
+        value: parseFloat(match[2]!),
         unit: match[3],
       });
     }
@@ -63,20 +63,20 @@ export const collectMetrics = {
     const skippedMatch = output.match(/(\d+)\s+skip(?:ped)?/i);
 
     if (passedMatch) {
-      metrics.push({ key: "tests.passed", value: parseInt(passedMatch[1]) });
+      metrics.push({ key: "tests.passed", value: parseInt(passedMatch[1]!) });
     }
     if (failedMatch) {
-      metrics.push({ key: "tests.failed", value: parseInt(failedMatch[1]) });
+      metrics.push({ key: "tests.failed", value: parseInt(failedMatch[1]!) });
     }
     if (skippedMatch) {
-      metrics.push({ key: "tests.skipped", value: parseInt(skippedMatch[1]) });
+      metrics.push({ key: "tests.skipped", value: parseInt(skippedMatch[1]!) });
     }
 
     // Try Zig test format: X/Y passed
     const zigMatch = output.match(/(\d+)\/(\d+) (?:test )?passed/i);
     if (zigMatch) {
-      metrics.push({ key: "tests.passed", value: parseInt(zigMatch[1]) });
-      metrics.push({ key: "tests.total", value: parseInt(zigMatch[2]) });
+      metrics.push({ key: "tests.passed", value: parseInt(zigMatch[1]!) });
+      metrics.push({ key: "tests.total", value: parseInt(zigMatch[2]!) });
     }
 
     return metrics;

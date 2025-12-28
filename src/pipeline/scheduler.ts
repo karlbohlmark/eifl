@@ -25,7 +25,7 @@ export async function handlePushTrigger(
     if (!branchMatch) {
       continue; // Not a branch push (could be tag)
     }
-    const branch = branchMatch[1];
+    const branch = branchMatch[1]!;
 
     console.log(`Processing push to ${branch} (${push.newrev.slice(0, 8)})`);
 

@@ -90,7 +90,7 @@ export async function executeJob(
     const stepStartTime = Date.now();
 
     for (let i = 0; i < job.steps.length; i++) {
-      const step = job.steps[i];
+      const step = job.steps[i]!;
       const configStep = job.pipelineConfig.steps[i];
 
       console.log(`\n🔄 Step ${i + 1}/${job.steps.length}: ${step.name}`);
