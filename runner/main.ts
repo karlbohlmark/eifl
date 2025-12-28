@@ -3,16 +3,23 @@ import { executeJob, type JobPayload } from "./executor";
 const SERVER_URL = process.env.EIFL_SERVER_URL || "http://localhost:3000";
 const RUNNER_TOKEN = process.env.EIFL_RUNNER_TOKEN;
 const POLL_INTERVAL = parseInt(process.env.EIFL_POLL_INTERVAL || "5000");
+// Runner tags can be specified via EIFL_RUNNER_TAGS (comma-separated)
+// Note: Tags are stored on the server when the runner is created
+// This env var is for display purposes only - update tags via the API
+const RUNNER_TAGS = process.env.EIFL_RUNNER_TAGS?.split(",").map(t => t.trim()).filter(Boolean) || [];
 
 if (!RUNNER_TOKEN) {
   console.error("Error: EIFL_RUNNER_TOKEN environment variable is required");
-  console.error("Create a runner via: curl -X POST http://server/api/runners -d '{\"name\":\"my-runner\"}'");
+  console.error("Create a runner via: curl -X POST http://server/api/runners -d '{\"name\":\"my-runner\", \"tags\":[\"performance\"]}'");
   process.exit(1);
 }
 
 console.log(`🏃 EIFL Runner starting...`);
 console.log(`   Server: ${SERVER_URL}`);
 console.log(`   Poll interval: ${POLL_INTERVAL}ms`);
+if (RUNNER_TAGS.length > 0) {
+  console.log(`   Tags: ${RUNNER_TAGS.join(", ")}`)
+}
 
 async function apiRequest(
   path: string,

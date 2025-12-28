@@ -5,6 +5,8 @@ import {
   getRunnerByToken,
   updateRunnerStatus,
   updateRunnerHeartbeat,
+  updateRunnerTags,
+  getRunnerTags,
   deleteRunner,
   getPendingRuns,
   getRun,
@@ -22,20 +24,45 @@ import type { Run, Step, Runner } from "../db/schema";
 
 // Runner management
 export async function handleCreateRunner(req: Request): Promise<Response> {
-  const body = await req.json() as { name: string };
+  const body = await req.json() as { name: string; tags?: string[] };
 
   if (!body.name || typeof body.name !== "string") {
     return Response.json({ error: "Name is required" }, { status: 400 });
   }
 
-  const runner = createRunner(body.name);
+  // Validate tags if provided
+  const tags = body.tags ?? [];
+  if (!Array.isArray(tags) || !tags.every(t => typeof t === "string")) {
+    return Response.json({ error: "Tags must be an array of strings" }, { status: 400 });
+  }
+
+  const runner = createRunner(body.name, tags);
   return Response.json(runner, { status: 201 });
+}
+
+export async function handleUpdateRunnerTags(id: number, req: Request): Promise<Response> {
+  const body = await req.json() as { tags: string[] };
+
+  if (!Array.isArray(body.tags) || !body.tags.every(t => typeof t === "string")) {
+    return Response.json({ error: "Tags must be an array of strings" }, { status: 400 });
+  }
+
+  const success = updateRunnerTags(id, body.tags);
+  if (!success) {
+    return Response.json({ error: "Runner not found" }, { status: 404 });
+  }
+
+  const runner = getRunner(id);
+  return Response.json(runner);
 }
 
 export function handleGetRunners(): Response {
   const runners = getRunners();
-  // Don't expose tokens in list
-  const safeRunners = runners.map(({ token, ...r }) => r);
+  // Don't expose tokens in list, parse tags to array
+  const safeRunners = runners.map(({ token, tags, ...r }) => ({
+    ...r,
+    tags: getRunnerTags({ token, tags, ...r } as Runner),
+  }));
   return Response.json(safeRunners);
 }
 
@@ -68,9 +95,21 @@ export interface JobPayload {
   pipelineConfig: object;
 }
 
+// Check if runner has all required tags for a pipeline
+function runnerMatchesTags(runnerTags: string[], requiredTags?: string[]): boolean {
+  if (!requiredTags || requiredTags.length === 0) {
+    return true; // No tags required, any runner can run this
+  }
+  // Runner must have ALL required tags
+  return requiredTags.every(tag => runnerTags.includes(tag));
+}
+
 export function handlePollForJob(runner: Runner): Response {
   // Update heartbeat
   updateRunnerHeartbeat(runner.id);
+
+  // Get runner's tags
+  const runnerTags = getRunnerTags(runner);
 
   // Find pending runs
   const pendingRuns = getPendingRuns();
@@ -78,17 +117,36 @@ export function handlePollForJob(runner: Runner): Response {
     return Response.json({ job: null });
   }
 
-  // Pick the first pending run
-  const run = pendingRuns[0];
-  const pipeline = getPipeline(run.pipeline_id);
-  if (!pipeline) {
+  // Find the first pending run that matches this runner's tags
+  let matchedRun: Run | null = null;
+  let matchedPipeline: ReturnType<typeof getPipeline> = null;
+  let matchedRepo: ReturnType<typeof getRepo> = null;
+
+  for (const run of pendingRuns) {
+    const pipeline = getPipeline(run.pipeline_id);
+    if (!pipeline) continue;
+
+    const pipelineConfig = JSON.parse(pipeline.config);
+    const requiredTags = pipelineConfig.runner_tags as string[] | undefined;
+
+    if (runnerMatchesTags(runnerTags, requiredTags)) {
+      const repo = getRepo(pipeline.repo_id);
+      if (repo) {
+        matchedRun = run;
+        matchedPipeline = pipeline;
+        matchedRepo = repo;
+        break;
+      }
+    }
+  }
+
+  if (!matchedRun || !matchedPipeline || !matchedRepo) {
     return Response.json({ job: null });
   }
 
-  const repo = getRepo(pipeline.repo_id);
-  if (!repo) {
-    return Response.json({ job: null });
-  }
+  const run = matchedRun;
+  const pipeline = matchedPipeline;
+  const repo = matchedRepo;
 
   // Mark runner as busy and run as running
   updateRunnerStatus(runner.id, "busy");

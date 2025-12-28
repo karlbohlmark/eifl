@@ -15,6 +15,7 @@ export interface PipelineTriggers {
 export interface PipelineConfig {
   name: string;
   triggers?: PipelineTriggers;
+  runner_tags?: string[]; // Tags that runners must have to execute this pipeline
   steps: PipelineStep[];
 }
 
@@ -93,6 +94,20 @@ export function validatePipelineConfig(config: unknown): PipelineConfig {
     steps.push(parsedStep);
   }
 
+  // Validate runner_tags (optional)
+  let runner_tags: string[] | undefined;
+  if (c.runner_tags !== undefined) {
+    if (!Array.isArray(c.runner_tags)) {
+      throw new PipelineParseError("'runner_tags' must be an array");
+    }
+    for (let i = 0; i < c.runner_tags.length; i++) {
+      if (typeof c.runner_tags[i] !== "string") {
+        throw new PipelineParseError(`'runner_tags[${i}]' must be a string`);
+      }
+    }
+    runner_tags = c.runner_tags as string[];
+  }
+
   // Validate triggers (optional)
   let triggers: PipelineTriggers | undefined;
   if (c.triggers !== undefined) {
@@ -130,6 +145,7 @@ export function validatePipelineConfig(config: unknown): PipelineConfig {
   return {
     name: c.name as string,
     triggers,
+    runner_tags,
     steps,
   };
 }

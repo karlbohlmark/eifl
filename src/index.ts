@@ -37,6 +37,7 @@ import {
   handleCreateRunner,
   handleGetRunners,
   handleDeleteRunner,
+  handleUpdateRunnerTags,
   authenticateRunner,
   handlePollForJob,
   handleStepUpdate,
@@ -265,6 +266,11 @@ async function handleApiRequest(
   const runnerMatch = path.match(/^runners\/(\d+)$/);
   if (runnerMatch && method === "DELETE") {
     return handleDeleteRunner(parseInt(runnerMatch[1]));
+  }
+
+  const runnerTagsMatch = path.match(/^runners\/(\d+)\/tags$/);
+  if (runnerTagsMatch && (method === "PUT" || method === "PATCH")) {
+    return handleUpdateRunnerTags(parseInt(runnerTagsMatch[1]), req);
   }
 
   // Runner API (authenticated)

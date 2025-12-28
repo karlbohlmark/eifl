@@ -206,11 +206,27 @@ export function getMetricHistory(pipelineId: number, key: string, limit = 100): 
 }
 
 // Runners
-export function createRunner(name: string): Runner {
+export function createRunner(name: string, tags: string[] = []): Runner {
   const db = getDb();
   const token = crypto.randomUUID();
-  const stmt = db.prepare("INSERT INTO runners (name, token) VALUES (?, ?) RETURNING *");
-  return stmt.get(name, token) as Runner;
+  const tagsJson = JSON.stringify(tags);
+  const stmt = db.prepare("INSERT INTO runners (name, token, tags) VALUES (?, ?, ?) RETURNING *");
+  return stmt.get(name, token, tagsJson) as Runner;
+}
+
+export function updateRunnerTags(id: number, tags: string[]): boolean {
+  const db = getDb();
+  const tagsJson = JSON.stringify(tags);
+  const result = db.run("UPDATE runners SET tags = ? WHERE id = ?", [tagsJson, id]);
+  return result.changes > 0;
+}
+
+export function getRunnerTags(runner: Runner): string[] {
+  try {
+    return JSON.parse(runner.tags || '[]');
+  } catch {
+    return [];
+  }
 }
 
 export function getRunners(): Runner[] {

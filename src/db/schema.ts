@@ -85,6 +85,7 @@ function initSchema(db: Database) {
       name TEXT NOT NULL UNIQUE,
       token TEXT NOT NULL UNIQUE,
       status TEXT NOT NULL DEFAULT 'offline',
+      tags TEXT DEFAULT '[]',
       last_seen TEXT,
       created_at TEXT DEFAULT (datetime('now') || 'Z')
     );
@@ -108,6 +109,15 @@ function initSchema(db: Database) {
     if (!hasRemoteUrlColumn) {
       console.log("Migrating database: adding remote_url to repos table");
       db.exec("ALTER TABLE repos ADD COLUMN remote_url TEXT");
+    }
+
+    // Check if tags column exists on runners table
+    const runnerTableInfo = db.prepare("PRAGMA table_info(runners);").all() as { name: string }[];
+    const hasTagsColumn = runnerTableInfo.some((column) => column.name === "tags");
+
+    if (!hasTagsColumn) {
+      console.log("Migrating database: adding tags to runners table");
+      db.exec("ALTER TABLE runners ADD COLUMN tags TEXT DEFAULT '[]'");
     }
   } catch (error) {
     console.error("Migration check failed:", error);
@@ -184,6 +194,12 @@ export interface Runner {
   name: string;
   token: string;
   status: RunnerStatus;
+  tags: string; // JSON array of tag strings
   last_seen: string | null;
   created_at: string;
+}
+
+// Parsed runner with tags as array
+export interface RunnerWithParsedTags extends Omit<Runner, 'tags'> {
+  tags: string[];
 }
