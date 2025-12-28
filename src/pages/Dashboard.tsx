@@ -96,12 +96,12 @@ export function Dashboard() {
 
   if (loading) {
     return (
-      <div className="container mx-auto p-8">
+      <div className="p-8">
         <div className="flex justify-between items-center mb-8">
           <Skeleton className="h-10 w-48" />
           <Skeleton className="h-10 w-32" />
         </div>
-        <div className="grid gap-6">
+        <div className="grid gap-4">
           <Skeleton className="h-48 w-full" />
           <Skeleton className="h-48 w-full" />
         </div>
@@ -110,7 +110,7 @@ export function Dashboard() {
   }
 
   return (
-    <div className="container mx-auto p-8">
+    <div className="max-w-7xl mx-auto p-8">
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-bold">Projects</h1>
         <Button onClick={() => setShowNewProject(!showNewProject)}>
@@ -148,7 +148,7 @@ export function Dashboard() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-6">
+        <div className="grid gap-4">
           {projects.map((project) => (
             <Card key={project.id}>
               <CardHeader>

@@ -189,7 +189,7 @@ export function PipelineView() {
 
   if (loading) {
     return (
-      <div className="container mx-auto p-8">
+      <div className="p-8">
         <p className="text-muted-foreground">Loading...</p>
       </div>
     );
@@ -197,14 +197,14 @@ export function PipelineView() {
 
   if (!pipeline) {
     return (
-      <div className="container mx-auto p-8">
+      <div className="p-8">
         <p className="text-muted-foreground">Pipeline not found</p>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto p-8">
+    <div className="max-w-7xl mx-auto p-8">
       <div className="mb-6">
         <Link
           to={`/repo/${pipeline.repo_id}`}
