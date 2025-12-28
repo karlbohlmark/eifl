@@ -46,10 +46,10 @@ export async function listTree(
       const match = line.match(/^(\d+) (blob|tree) ([0-9a-f]+)\t(.+)$/);
       if (match) {
         entries.push({
-          mode: match[1],
-          type: match[2] as "blob" | "tree",
-          hash: match[3],
-          name: match[4],
+          mode: match[1]!,
+          type: match[2]! as "blob" | "tree",
+          hash: match[3]!,
+          name: match[4]!,
         });
       }
     }
@@ -87,10 +87,11 @@ export async function getFileContent(
     const bytes = new Uint8Array(buffer);
     let nonPrintable = 0;
     for (let i = 0; i < Math.min(bytes.length, 8000); i++) {
-      if (bytes[i] === 0) {
+      const byte = bytes[i]!;
+      if (byte === 0) {
         return { content: "", size: bytes.length, binary: true };
       }
-      if (bytes[i] < 32 && bytes[i] !== 9 && bytes[i] !== 10 && bytes[i] !== 13) {
+      if (byte < 32 && byte !== 9 && byte !== 10 && byte !== 13) {
         nonPrintable++;
       }
     }
@@ -138,11 +139,11 @@ export async function getCommits(
       const lines = block.trim().split("\n");
       if (lines.length >= 5) {
         commits.push({
-          sha: lines[0],
-          author: lines[1],
-          authorEmail: lines[2],
-          date: lines[3],
-          message: lines[4],
+          sha: lines[0]!,
+          author: lines[1]!,
+          authorEmail: lines[2]!,
+          date: lines[3]!,
+          message: lines[4]!,
         });
       }
     }
@@ -170,10 +171,10 @@ export async function getCommit(
     const lines = result.stdout.toString().trim().split("\n");
     if (lines.length >= 5) {
       return {
-        sha: lines[0],
-        author: lines[1],
-        authorEmail: lines[2],
-        date: lines[3],
+        sha: lines[0]!,
+        author: lines[1]!,
+        authorEmail: lines[2]!,
+        date: lines[3]!,
         message: lines.slice(4).join("\n"),
       };
     }

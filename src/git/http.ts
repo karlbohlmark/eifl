@@ -169,9 +169,9 @@ function parsePushInfo(data: Uint8Array): PushInfo[] {
     const match = line.match(/^([0-9a-f]{40}) ([0-9a-f]{40}) (refs\/[^\x00\n]+)/);
     if (match) {
       pushes.push({
-        oldrev: match[1],
-        newrev: match[2],
-        refname: match[3],
+        oldrev: match[1]!,
+        newrev: match[2]!,
+        refname: match[3]!,
       });
     }
   }

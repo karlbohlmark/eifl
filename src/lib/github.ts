@@ -110,8 +110,8 @@ export async function updateCommitStatus(
     // Handle optional .git suffix
     const match = repo.remote_url.match(/github\.com[:/]([^/]+)\/([^/]+?)(?:\.git)?$/);
     if (match) {
-      owner = match[1];
-      repoName = match[2];
+      owner = match[1]!;
+      repoName = match[2]!;
     } else {
       console.warn(`Could not parse GitHub URL: ${repo.remote_url}`);
       return;

@@ -194,9 +194,9 @@ export function Dashboard() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {repos[project.id]?.length > 0 ? (
+                {(repos[project.id] ?? []).length > 0 ? (
                   <div className="space-y-2">
-                    {repos[project.id].map((repo) => (
+                    {(repos[project.id] ?? []).map((repo) => (
                       <Link
                         key={repo.id}
                         to={`/repo/${repo.id}`}

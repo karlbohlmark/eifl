@@ -52,7 +52,7 @@ async function verifySignature(
       return false;
     }
 
-    const sigHex = signatureParts[1];
+    const sigHex = signatureParts[1]!;
     const hexMatch = sigHex.match(/.{1,2}/g);
     if (!hexMatch) {
       return false;

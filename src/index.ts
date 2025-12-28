@@ -71,7 +71,7 @@ const server = serve({
     "/repo/*": index,
     "/pipeline/*": index,
   },
-  async fetch(req) {
+  async fetch(req): Promise<Response> {
     const url = new URL(req.url);
     const path = url.pathname;
     const method = req.method;
@@ -97,7 +97,7 @@ const server = serve({
     }
 
     // Fallback to index for other routes (SPA)
-    return index;
+    return index as unknown as Response;
   },
 
   development: process.env.NODE_ENV !== "production" && {
@@ -162,14 +162,14 @@ async function handleApiRequest(
 
   const projectMatch = path.match(/^projects\/(\d+)$/);
   if (projectMatch) {
-    const id = parseInt(projectMatch[1]);
+    const id = parseInt(projectMatch[1]!);
     if (method === "GET") return handleGetProject(id);
     if (method === "DELETE") return handleDeleteProject(id);
   }
 
   const projectReposMatch = path.match(/^projects\/(\d+)\/repos$/);
   if (projectReposMatch) {
-    const projectId = parseInt(projectReposMatch[1]);
+    const projectId = parseInt(projectReposMatch[1]!);
     if (method === "GET") return handleGetRepos(projectId);
     if (method === "POST") return handleCreateRepo(projectId, req);
   }
@@ -177,107 +177,107 @@ async function handleApiRequest(
   // Project secrets
   const projectSecretsMatch = path.match(/^projects\/(\d+)\/secrets$/);
   if (projectSecretsMatch) {
-    const projectId = parseInt(projectSecretsMatch[1]);
+    const projectId = parseInt(projectSecretsMatch[1]!);
     if (method === "GET") return handleGetProjectSecrets(projectId);
     if (method === "POST") return handleCreateProjectSecret(projectId, req);
   }
 
   const projectSecretMatch = path.match(/^projects\/(\d+)\/secrets\/([^/]+)$/);
   if (projectSecretMatch && method === "DELETE") {
-    const projectId = parseInt(projectSecretMatch[1]);
-    const name = decodeURIComponent(projectSecretMatch[2]);
+    const projectId = parseInt(projectSecretMatch[1]!);
+    const name = decodeURIComponent(projectSecretMatch[2]!);
     return handleDeleteProjectSecret(projectId, name);
   }
 
   // Repos
   const repoMatch = path.match(/^repos\/(\d+)$/);
   if (repoMatch) {
-    const id = parseInt(repoMatch[1]);
+    const id = parseInt(repoMatch[1]!);
     if (method === "GET") return handleGetRepo(id);
     if (method === "DELETE") return handleDeleteRepo(id);
   }
 
   const repoBranchesMatch = path.match(/^repos\/(\d+)\/branches$/);
   if (repoBranchesMatch && method === "GET") {
-    return handleGetBranches(parseInt(repoBranchesMatch[1]));
+    return handleGetBranches(parseInt(repoBranchesMatch[1]!));
   }
 
   const repoTreeMatch = path.match(/^repos\/(\d+)\/tree\/([^/]+)(?:\/(.*))?$/);
   if (repoTreeMatch && method === "GET") {
-    const id = parseInt(repoTreeMatch[1]);
-    const ref = decodeURIComponent(repoTreeMatch[2]);
+    const id = parseInt(repoTreeMatch[1]!);
+    const ref = decodeURIComponent(repoTreeMatch[2]!);
     const treePath = repoTreeMatch[3] ? decodeURIComponent(repoTreeMatch[3]) : "";
     return handleGetTree(id, ref, treePath);
   }
 
   const repoFileMatch = path.match(/^repos\/(\d+)\/file\/([^/]+)\/(.+)$/);
   if (repoFileMatch && method === "GET") {
-    const id = parseInt(repoFileMatch[1]);
-    const ref = decodeURIComponent(repoFileMatch[2]);
-    const filePath = decodeURIComponent(repoFileMatch[3]);
+    const id = parseInt(repoFileMatch[1]!);
+    const ref = decodeURIComponent(repoFileMatch[2]!);
+    const filePath = decodeURIComponent(repoFileMatch[3]!);
     return handleGetFile(id, ref, filePath);
   }
 
   const repoCommitsMatch = path.match(/^repos\/(\d+)\/commits\/([^/]+)$/);
   if (repoCommitsMatch && method === "GET") {
-    const id = parseInt(repoCommitsMatch[1]);
-    const ref = decodeURIComponent(repoCommitsMatch[2]);
+    const id = parseInt(repoCommitsMatch[1]!);
+    const ref = decodeURIComponent(repoCommitsMatch[2]!);
     const limit = parseInt(url.searchParams.get("limit") || "50");
     return handleGetCommits(id, ref, limit);
   }
 
   const repoCommitMatch = path.match(/^repos\/(\d+)\/commit\/([^/]+)$/);
   if (repoCommitMatch && method === "GET") {
-    const id = parseInt(repoCommitMatch[1]);
-    const sha = decodeURIComponent(repoCommitMatch[2]);
+    const id = parseInt(repoCommitMatch[1]!);
+    const sha = decodeURIComponent(repoCommitMatch[2]!);
     return handleGetCommit(id, sha);
   }
 
   // Repo secrets
   const repoSecretsMatch = path.match(/^repos\/(\d+)\/secrets$/);
   if (repoSecretsMatch) {
-    const repoId = parseInt(repoSecretsMatch[1]);
+    const repoId = parseInt(repoSecretsMatch[1]!);
     if (method === "GET") return handleGetRepoSecrets(repoId);
     if (method === "POST") return handleCreateRepoSecret(repoId, req);
   }
 
   const repoSecretMatch = path.match(/^repos\/(\d+)\/secrets\/([^/]+)$/);
   if (repoSecretMatch && method === "DELETE") {
-    const repoId = parseInt(repoSecretMatch[1]);
-    const name = decodeURIComponent(repoSecretMatch[2]);
+    const repoId = parseInt(repoSecretMatch[1]!);
+    const name = decodeURIComponent(repoSecretMatch[2]!);
     return handleDeleteRepoSecret(repoId, name);
   }
 
   // Pipelines
   const repoPipelinesMatch = path.match(/^repos\/(\d+)\/pipelines$/);
   if (repoPipelinesMatch) {
-    const repoId = parseInt(repoPipelinesMatch[1]);
+    const repoId = parseInt(repoPipelinesMatch[1]!);
     if (method === "GET") return handleGetPipelines(repoId);
     if (method === "POST") return handleCreatePipeline(repoId, req);
   }
 
   const pipelineMatch = path.match(/^pipelines\/(\d+)$/);
   if (pipelineMatch) {
-    const id = parseInt(pipelineMatch[1]);
+    const id = parseInt(pipelineMatch[1]!);
     if (method === "GET") return handleGetPipeline(id);
     if (method === "DELETE") return handleDeletePipeline(id);
   }
 
   const pipelineTriggerMatch = path.match(/^pipelines\/(\d+)\/trigger$/);
   if (pipelineTriggerMatch && method === "POST") {
-    return handleTriggerPipeline(parseInt(pipelineTriggerMatch[1]), req);
+    return handleTriggerPipeline(parseInt(pipelineTriggerMatch[1]!), req);
   }
 
   const pipelineRunsMatch = path.match(/^pipelines\/(\d+)\/runs$/);
   if (pipelineRunsMatch && method === "GET") {
     const limit = parseInt(url.searchParams.get("limit") || "50");
-    return handleGetRuns(parseInt(pipelineRunsMatch[1]), limit);
+    return handleGetRuns(parseInt(pipelineRunsMatch[1]!), limit);
   }
 
   const pipelineMetricsMatch = path.match(/^pipelines\/(\d+)\/metrics\/(.+)$/);
   if (pipelineMetricsMatch && method === "GET") {
-    const pipelineId = parseInt(pipelineMetricsMatch[1]);
-    const key = decodeURIComponent(pipelineMetricsMatch[2]);
+    const pipelineId = parseInt(pipelineMetricsMatch[1]!);
+    const key = decodeURIComponent(pipelineMetricsMatch[2]!);
     const limit = parseInt(url.searchParams.get("limit") || "100");
     return handleGetMetricHistory(pipelineId, key, limit);
   }
@@ -285,12 +285,12 @@ async function handleApiRequest(
   // Runs
   const runMatch = path.match(/^runs\/(\d+)$/);
   if (runMatch && method === "GET") {
-    return handleGetRun(parseInt(runMatch[1]));
+    return handleGetRun(parseInt(runMatch[1]!));
   }
 
   const runCancelMatch = path.match(/^runs\/(\d+)\/cancel$/);
   if (runCancelMatch && method === "POST") {
-    return handleCancelRun(parseInt(runCancelMatch[1]));
+    return handleCancelRun(parseInt(runCancelMatch[1]!));
   }
 
   // Runners (admin)
@@ -303,12 +303,12 @@ async function handleApiRequest(
 
   const runnerMatch = path.match(/^runners\/(\d+)$/);
   if (runnerMatch && method === "DELETE") {
-    return handleDeleteRunner(parseInt(runnerMatch[1]));
+    return handleDeleteRunner(parseInt(runnerMatch[1]!));
   }
 
   const runnerTagsMatch = path.match(/^runners\/(\d+)\/tags$/);
   if (runnerTagsMatch && (method === "PUT" || method === "PATCH")) {
-    return handleUpdateRunnerTags(parseInt(runnerTagsMatch[1]), req);
+    return handleUpdateRunnerTags(parseInt(runnerTagsMatch[1]!), req);
   }
 
   // Runner API (authenticated)
