@@ -1,5 +1,4 @@
 import {
-  createPipeline,
   upsertPipeline,
   getPipelines,
   getPipeline,
@@ -15,7 +14,6 @@ import {
   getRepo,
 } from "../db/queries";
 import { getLatestCommit } from "../git/http";
-import type { Pipeline, Run } from "../db/schema";
 
 export interface PipelineConfig {
   name: string;

@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Trash2, Tag, X, Copy, Check, Server } from "lucide-react";
+import { Plus, Trash2, Tag, Server } from "lucide-react";
 
 interface Runner {
   id: number;
@@ -22,7 +22,6 @@ export function Runners() {
   const [loading, setLoading] = useState(true);
   const [editingTags, setEditingTags] = useState<number | null>(null);
   const [editTagsValue, setEditTagsValue] = useState("");
-  const [copiedToken, setCopiedToken] = useState<number | null>(null);
 
   useEffect(() => {
     fetchRunners();

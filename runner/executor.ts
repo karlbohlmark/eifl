@@ -55,7 +55,7 @@ export async function executeJob(
     // Mask token in logs - handles various HTTP(S) auth formats: oauth2:token@, username:password@, token@
     // Note: SSH URLs (git@) don't use embedded credentials in the same way and are not masked
     const maskedUrl = gitUrl.replace(
-      /https?:\/\/([^@\/]+@)/,
+      /https?:\/\/([^@/]+@)/,
       (match, credentials) => {
         // If it's in oauth2:token format, replace with oauth2:***@
         if (credentials.startsWith("oauth2:")) {

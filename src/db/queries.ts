@@ -180,7 +180,7 @@ export function getSteps(runId: number): Step[] {
   return db.query("SELECT * FROM steps WHERE run_id = ? ORDER BY id").all(runId) as Step[];
 }
 
-export function updateStepStatus(id: number, status: StepStatus, exitCode?: number, output?: string): void {
+export function updateStepStatus(id: number, status: StepStatus, exitCode?: number, _output?: string): void {
   const db = getDb();
   if (status === "running") {
     db.run("UPDATE steps SET status = ?, started_at = datetime('now') || 'Z' WHERE id = ?", [status, id]);

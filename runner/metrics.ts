@@ -1,4 +1,3 @@
-import { $ } from "bun";
 import { Glob } from "bun";
 
 export interface MetricValue {

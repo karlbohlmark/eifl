@@ -77,7 +77,7 @@ export async function verifyGitHubRepo(url: string): Promise<VerifyRepoResult> {
         cloneUrl: data.clone_url,
       },
     };
-  } catch (error) {
+  } catch {
     return { valid: false, error: "Failed to connect to GitHub API" };
   }
 }

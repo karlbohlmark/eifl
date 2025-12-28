@@ -1,4 +1,4 @@
-import { serve, type Server } from "bun";
+import { serve } from "bun";
 import index from "./index.html";
 import { getDb } from "./db/schema";
 import {

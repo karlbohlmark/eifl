@@ -46,7 +46,7 @@ export function parsePipelineConfig(content: string): PipelineConfig {
 
   try {
     config = JSON.parse(content);
-  } catch (e) {
+  } catch {
     throw new PipelineParseError("Invalid JSON");
   }
 

@@ -1,4 +1,4 @@
-import { getRepoByPath, getPipelines, upsertPipeline, createRun, createStep } from "../db/queries";
+import { getRepoByPath, upsertPipeline, createRun, createStep } from "../db/queries";
 import { getPipelineConfig } from "../git/browse";
 import { parsePipelineConfig, shouldTriggerOnPush, type PipelineConfig } from "./parser";
 import type { PushInfo } from "../git/http";

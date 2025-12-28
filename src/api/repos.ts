@@ -75,7 +75,7 @@ export async function handleCreateRepo(projectId: number, req: Request): Promise
     }
     const repo = createRepo(projectId, repoName, repoPath, body.remoteUrl);
     return Response.json(repo, { status: 201 });
-  } catch (error) {
+  } catch {
     return Response.json({ error: "Failed to create repository" }, { status: 500 });
   }
 }
