@@ -88,5 +88,5 @@ test("Scheduled pipeline runs", async () => {
 
   const runs = getRuns(pipeline.id);
   expect(runs.length).toBeGreaterThan(0);
-  expect(runs[0].triggered_by).toBe("schedule");
+  expect(runs[0]!.triggered_by).toBe("schedule");
 });
