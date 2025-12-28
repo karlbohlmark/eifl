@@ -7,7 +7,7 @@ A lightweight, self-hosted Git + CI platform built with Bun. Designed for perfor
 - **Git hosting** - Push/pull via HTTP smart protocol
 - **GitHub integration** - Use GitHub for source control, EIFL for CI
 - **Pipeline execution** - Define pipelines in `.eifl.json`
-- **Automatic triggers** - Pipelines run on push
+- **Automatic triggers** - Pipelines run on push or on a schedule
 - **Manual triggers** - Run pipelines on demand
 - **Build runners** - Distributed execution on separate machines
 - **Custom metrics** - Track build time, binary sizes, test counts
@@ -80,7 +80,10 @@ Create `.eifl.json` in your repository:
   "name": "build",
   "triggers": {
     "push": { "branches": ["main"] },
-    "manual": true
+    "manual": true,
+    "schedule": [
+      { "cron": "0 2 * * *" }
+    ]
   },
   "steps": [
     { "name": "test", "run": "zig build test" },
@@ -92,6 +95,41 @@ Create `.eifl.json` in your repository:
   ]
 }
 ```
+
+### Trigger Types
+
+**Push triggers** - Run on git push:
+```json
+"triggers": {
+  "push": { "branches": ["main", "develop"] }
+}
+```
+
+**Manual triggers** - Allow manual execution:
+```json
+"triggers": {
+  "manual": true
+}
+```
+
+**Scheduled triggers** - Run on a cron schedule (UTC timezone):
+```json
+"triggers": {
+  "schedule": [
+    { "cron": "0 2 * * *" },     // Daily at 2am UTC
+    { "cron": "0 */6 * * *" }    // Every 6 hours
+  ]
+}
+```
+
+Cron format: `minute hour day month weekday`
+- Examples:
+  - `0 2 * * *` - Daily at 2:00 AM UTC
+  - `0 */6 * * *` - Every 6 hours
+  - `0 0 * * 1` - Every Monday at midnight UTC
+  - `*/15 * * * *` - Every 15 minutes
+
+All cron schedules run in UTC timezone.
 
 ### Custom Metrics
 
