@@ -6,6 +6,9 @@
     },
     "manual": true
   },
+  "cache": {
+    "bun": true
+  },
   "steps": [
     {
       "name": "install",
