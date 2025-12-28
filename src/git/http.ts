@@ -1,10 +1,9 @@
 import { $ } from "bun";
 import { getRepoByPath } from "../db/queries";
-
-const REPOS_DIR = "./data/repos";
+import { getReposDir } from "../config";
 
 export async function initBareRepo(path: string): Promise<void> {
-  const fullPath = `${REPOS_DIR}/${path}`;
+  const fullPath = `${getReposDir()}/${path}`;
   await $`git init --bare ${fullPath}`.quiet();
 
   // Create post-receive hook for pipeline triggering
@@ -21,7 +20,7 @@ done
 }
 
 export async function deleteRepoFiles(path: string): Promise<void> {
-  const fullPath = `${REPOS_DIR}/${path}`;
+  const fullPath = `${getReposDir()}/${path}`;
   await $`rm -rf ${fullPath}`.quiet();
 }
 
@@ -38,7 +37,7 @@ export async function handleGitInfoRefs(
   repoPath: string,
   service: string
 ): Promise<Response> {
-  const fullPath = `${REPOS_DIR}/${repoPath}`;
+  const fullPath = `${getReposDir()}/${repoPath}`;
 
   // Verify repo exists
   const repo = getRepoByPath(repoPath);
@@ -71,7 +70,7 @@ export async function handleGitUploadPack(
   repoPath: string,
   body: ReadableStream<Uint8Array> | null
 ): Promise<Response> {
-  const fullPath = `${REPOS_DIR}/${repoPath}`;
+  const fullPath = `${getReposDir()}/${repoPath}`;
 
   // Verify repo exists
   const repo = getRepoByPath(repoPath);
@@ -108,7 +107,7 @@ export async function handleGitReceivePack(
   repoPath: string,
   body: ReadableStream<Uint8Array> | null
 ): Promise<{ response: Response; pushInfo: PushInfo[] }> {
-  const fullPath = `${REPOS_DIR}/${repoPath}`;
+  const fullPath = `${getReposDir()}/${repoPath}`;
 
   // Verify repo exists
   const repo = getRepoByPath(repoPath);
@@ -181,7 +180,7 @@ function parsePushInfo(data: Uint8Array): PushInfo[] {
 
 // Get latest commit SHA for a branch
 export async function getLatestCommit(repoPath: string, branch: string): Promise<string | null> {
-  const fullPath = `${REPOS_DIR}/${repoPath}`;
+  const fullPath = `${getReposDir()}/${repoPath}`;
   try {
     const result = await $`git -C ${fullPath} rev-parse ${branch}`.quiet();
     if (result.exitCode === 0) {
@@ -195,7 +194,7 @@ export async function getLatestCommit(repoPath: string, branch: string): Promise
 
 // List branches
 export async function listBranches(repoPath: string): Promise<string[]> {
-  const fullPath = `${REPOS_DIR}/${repoPath}`;
+  const fullPath = `${getReposDir()}/${repoPath}`;
   try {
     const result = await $`git -C ${fullPath} branch --format='%(refname:short)'`.quiet();
     if (result.exitCode === 0) {

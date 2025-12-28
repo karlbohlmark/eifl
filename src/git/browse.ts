@@ -1,6 +1,5 @@
 import { $ } from "bun";
-
-const REPOS_DIR = "./data/repos";
+import { getReposDir } from "../config";
 
 export interface TreeEntry {
   mode: string;
@@ -29,7 +28,7 @@ export async function listTree(
   ref: string,
   path = ""
 ): Promise<TreeEntry[]> {
-  const fullPath = `${REPOS_DIR}/${repoPath}`;
+  const fullPath = `${getReposDir()}/${repoPath}`;
   const treePath = path ? `${ref}:${path}` : ref;
 
   try {
@@ -72,7 +71,7 @@ export async function getFileContent(
   ref: string,
   filePath: string
 ): Promise<FileContent | null> {
-  const fullPath = `${REPOS_DIR}/${repoPath}`;
+  const fullPath = `${getReposDir()}/${repoPath}`;
 
   try {
     const result = await $`git -C ${fullPath} show ${ref}:${filePath}`.quiet();
@@ -110,7 +109,7 @@ export async function getCommits(
   limit = 50,
   path?: string
 ): Promise<Commit[]> {
-  const fullPath = `${REPOS_DIR}/${repoPath}`;
+  const fullPath = `${getReposDir()}/${repoPath}`;
 
   try {
     const format = "%H%n%an%n%ae%n%aI%n%s%n---";
@@ -159,7 +158,7 @@ export async function getCommit(
   repoPath: string,
   sha: string
 ): Promise<Commit | null> {
-  const fullPath = `${REPOS_DIR}/${repoPath}`;
+  const fullPath = `${getReposDir()}/${repoPath}`;
 
   try {
     const format = "%H%n%an%n%ae%n%aI%n%B";
@@ -189,7 +188,7 @@ export async function getCommitDiff(
   repoPath: string,
   sha: string
 ): Promise<string> {
-  const fullPath = `${REPOS_DIR}/${repoPath}`;
+  const fullPath = `${getReposDir()}/${repoPath}`;
 
   try {
     const result = await $`git -C ${fullPath} show --format="" ${sha}`.quiet();

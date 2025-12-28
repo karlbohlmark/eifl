@@ -2,6 +2,7 @@ import parser from "cron-parser";
 import { getPipelinesDueForRun, updatePipelineNextRun, createRun, createStep, getRepo, hasPendingOrRunningRun } from "../db/queries";
 import { parsePipelineConfig } from "./parser";
 import { $ } from "bun";
+import { getReposDir } from "../config";
 
 export function getNextRun(cron: string): Date {
   try {
@@ -18,7 +19,7 @@ export function getNextRun(cron: string): Date {
 }
 
 async function getLatestCommitSha(repoPath: string, branch: string): Promise<string | null> {
-  const fullPath = `./data/repos/${repoPath}`;
+  const fullPath = `${getReposDir()}/${repoPath}`;
   try {
     const result = await $`git -C ${fullPath} rev-parse ${branch}`.quiet();
     if (result.exitCode !== 0) {

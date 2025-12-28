@@ -1,12 +1,13 @@
 import { Database } from "bun:sqlite";
-
-const DATA_DIR = "./data";
-const DB_PATH = `${DATA_DIR}/eifl.db`;
+import { getDataDir } from "../config";
 
 let db: Database | null = null;
 
 export function getDb(): Database {
   if (!db) {
+    const DATA_DIR = getDataDir();
+    const DB_PATH = `${DATA_DIR}/eifl.db`;
+
     // Ensure data directory exists
     Bun.spawnSync(["mkdir", "-p", DATA_DIR]);
 
@@ -16,6 +17,14 @@ export function getDb(): Database {
     initSchema(db);
   }
   return db;
+}
+
+// Allow tests to reset the database connection
+export function resetDb() {
+  if (db) {
+    db.close();
+    db = null;
+  }
 }
 
 function initSchema(db: Database) {

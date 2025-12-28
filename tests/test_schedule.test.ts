@@ -1,22 +1,34 @@
 import { expect, test, beforeAll, afterAll } from "bun:test";
-import { getDb } from "../src/db/schema";
+import { getDb, resetDb } from "../src/db/schema";
 import { createProject, createRepo, upsertPipeline, getRuns } from "../src/db/queries";
 import { processScheduledPipelines } from "../src/pipeline/cron";
 import { $ } from "bun";
 import { existsSync } from "fs";
 import { rmSync, mkdirSync } from "fs";
 
+// Setup isolated test environment
+const TEST_DATA_DIR = "./test-data";
+const TEST_REPOS_DIR = `${TEST_DATA_DIR}/repos`;
 const TEST_REPO_PATH = "test-scheduler/test-repo.git";
-const TEST_REPO_FULL_PATH = `./data/repos/${TEST_REPO_PATH}`;
+const TEST_REPO_FULL_PATH = `${TEST_REPOS_DIR}/${TEST_REPO_PATH}`;
 
 beforeAll(async () => {
-  // Clean up any existing test repo
-  if (existsSync(TEST_REPO_FULL_PATH)) {
-    rmSync(TEST_REPO_FULL_PATH, { recursive: true, force: true });
+  // Set environment variables for test isolation
+  process.env.DATA_DIR = TEST_DATA_DIR;
+  process.env.REPOS_DIR = TEST_REPOS_DIR;
+
+  // Reset database connection to pick up new environment variables
+  resetDb();
+
+  // Clean up any existing test data
+  if (existsSync(TEST_DATA_DIR)) {
+    rmSync(TEST_DATA_DIR, { recursive: true, force: true });
   }
 
-  // Create test git repository
+  // Create test directories
   mkdirSync(TEST_REPO_FULL_PATH, { recursive: true });
+
+  // Create test git repository
   await $`git -C ${TEST_REPO_FULL_PATH} init --initial-branch=main`.quiet();
   await $`git -C ${TEST_REPO_FULL_PATH} config user.email "test@example.com"`.quiet();
   await $`git -C ${TEST_REPO_FULL_PATH} config user.name "Test User"`.quiet();
@@ -28,10 +40,17 @@ beforeAll(async () => {
 });
 
 afterAll(() => {
-  // Clean up test repo
-  if (existsSync(TEST_REPO_FULL_PATH)) {
-    rmSync(TEST_REPO_FULL_PATH, { recursive: true, force: true });
+  // Clean up test database connection
+  resetDb();
+
+  // Clean up test data directory
+  if (existsSync(TEST_DATA_DIR)) {
+    rmSync(TEST_DATA_DIR, { recursive: true, force: true });
   }
+
+  // Reset environment variables
+  delete process.env.DATA_DIR;
+  delete process.env.REPOS_DIR;
 });
 
 test("Scheduled pipeline runs", async () => {
