@@ -3,6 +3,37 @@ import { collectMetrics } from "./metrics";
 import { restoreCache, saveCache, type CachePresets, type CacheResult } from "./cache";
 import type { Run, Step } from "../src/db/schema";
 
+/**
+ * Evaluate a conditional expression for step execution.
+ * Supports simple expressions like:
+ * - trigger == 'schedule'
+ * - trigger == 'push'
+ * - trigger == 'manual'
+ *
+ * @param condition - The condition string to evaluate
+ * @param context - Context object containing variables like 'trigger'
+ * @returns true if condition passes, false otherwise
+ */
+function evaluateCondition(condition: string, context: Record<string, any>): boolean {
+  // Simple expression parser for equality checks
+  // Format: "variable == 'value'" or "variable != 'value'"
+  const eqMatch = condition.match(/^\s*(\w+)\s*==\s*'([^']+)'\s*$/);
+  if (eqMatch) {
+    const [, varName, expectedValue] = eqMatch;
+    return context[varName!] === expectedValue;
+  }
+
+  const neqMatch = condition.match(/^\s*(\w+)\s*!=\s*'([^']+)'\s*$/);
+  if (neqMatch) {
+    const [, varName, expectedValue] = neqMatch;
+    return context[varName!] !== expectedValue;
+  }
+
+  // If we can't parse the condition, log a warning and skip the step
+  console.warn(`Unable to parse condition: "${condition}". Step will be skipped.`);
+  return false;
+}
+
 export interface JobPayload {
   run: Run;
   steps: Step[];
@@ -16,6 +47,7 @@ export interface JobPayload {
       name: string;
       run: string;
       capture_sizes?: string[];
+      if?: string;
     }>;
   };
   secrets: Record<string, string>;
@@ -106,9 +138,24 @@ export async function executeJob(
     const allMetrics: Array<{ key: string; value: number; unit?: string }> = [];
     const stepStartTime = Date.now();
 
+    // Create context for conditional evaluation
+    const context = {
+      trigger: job.run.triggered_by || 'unknown',
+      branch: job.branch || '',
+    };
+
     for (let i = 0; i < job.steps.length; i++) {
       const step = job.steps[i]!;
       const configStep = job.pipelineConfig.steps[i];
+
+      // Check if step should be skipped based on condition
+      if (configStep?.if) {
+        const shouldRun = evaluateCondition(configStep.if, context);
+        if (!shouldRun) {
+          console.log(`\n⏭️  Step ${i + 1}/${job.steps.length}: ${step.name} (skipped - condition not met: ${configStep.if})`);
+          continue;
+        }
+      }
 
       console.log(`\n🔄 Step ${i + 1}/${job.steps.length}: ${step.name}`);
       await callbacks.onStepStart(step.id);
