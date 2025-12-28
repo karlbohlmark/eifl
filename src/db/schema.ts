@@ -24,7 +24,7 @@ function initSchema(db: Database) {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL UNIQUE,
       description TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
+      created_at TEXT DEFAULT (datetime('now') || 'Z')
     );
 
     CREATE TABLE IF NOT EXISTS repos (
@@ -34,7 +34,7 @@ function initSchema(db: Database) {
       path TEXT NOT NULL UNIQUE,
       remote_url TEXT,
       default_branch TEXT DEFAULT 'main',
-      created_at TEXT DEFAULT (datetime('now')),
+      created_at TEXT DEFAULT (datetime('now') || 'Z'),
       UNIQUE(project_id, name)
     );
 
@@ -43,7 +43,7 @@ function initSchema(db: Database) {
       repo_id INTEGER NOT NULL REFERENCES repos(id) ON DELETE CASCADE,
       name TEXT NOT NULL,
       config TEXT NOT NULL,
-      created_at TEXT DEFAULT (datetime('now')),
+      created_at TEXT DEFAULT (datetime('now') || 'Z'),
       UNIQUE(repo_id, name)
     );
 
@@ -56,7 +56,7 @@ function initSchema(db: Database) {
       triggered_by TEXT,
       started_at TEXT,
       finished_at TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
+      created_at TEXT DEFAULT (datetime('now') || 'Z')
     );
 
     CREATE TABLE IF NOT EXISTS steps (
@@ -77,7 +77,7 @@ function initSchema(db: Database) {
       key TEXT NOT NULL,
       value REAL NOT NULL,
       unit TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
+      created_at TEXT DEFAULT (datetime('now') || 'Z')
     );
 
     CREATE TABLE IF NOT EXISTS runners (
@@ -86,7 +86,7 @@ function initSchema(db: Database) {
       token TEXT NOT NULL UNIQUE,
       status TEXT NOT NULL DEFAULT 'offline',
       last_seen TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
+      created_at TEXT DEFAULT (datetime('now') || 'Z')
     );
 
     CREATE INDEX IF NOT EXISTS idx_repos_project ON repos(project_id);

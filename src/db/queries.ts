@@ -137,9 +137,9 @@ export function getRun(id: number): Run | null {
 export function updateRunStatus(id: number, status: RunStatus): void {
   const db = getDb();
   if (status === "running") {
-    db.run("UPDATE runs SET status = ?, started_at = datetime('now') WHERE id = ?", [status, id]);
+    db.run("UPDATE runs SET status = ?, started_at = datetime('now') || 'Z' WHERE id = ?", [status, id]);
   } else if (status === "success" || status === "failed" || status === "cancelled") {
-    db.run("UPDATE runs SET status = ?, finished_at = datetime('now') WHERE id = ?", [status, id]);
+    db.run("UPDATE runs SET status = ?, finished_at = datetime('now') || 'Z' WHERE id = ?", [status, id]);
   } else {
     db.run("UPDATE runs SET status = ? WHERE id = ?", [status, id]);
   }
@@ -165,10 +165,10 @@ export function getSteps(runId: number): Step[] {
 export function updateStepStatus(id: number, status: StepStatus, exitCode?: number, output?: string): void {
   const db = getDb();
   if (status === "running") {
-    db.run("UPDATE steps SET status = ?, started_at = datetime('now') WHERE id = ?", [status, id]);
+    db.run("UPDATE steps SET status = ?, started_at = datetime('now') || 'Z' WHERE id = ?", [status, id]);
   } else if (status === "success" || status === "failed") {
     db.run(
-      "UPDATE steps SET status = ?, exit_code = ?, finished_at = datetime('now') WHERE id = ?",
+      "UPDATE steps SET status = ?, exit_code = ?, finished_at = datetime('now') || 'Z' WHERE id = ?",
       [status, exitCode ?? null, id]
     );
   } else {
@@ -230,12 +230,12 @@ export function getRunnerByToken(token: string): Runner | null {
 
 export function updateRunnerStatus(id: number, status: RunnerStatus): void {
   const db = getDb();
-  db.run("UPDATE runners SET status = ?, last_seen = datetime('now') WHERE id = ?", [status, id]);
+  db.run("UPDATE runners SET status = ?, last_seen = datetime('now') || 'Z' WHERE id = ?", [status, id]);
 }
 
 export function updateRunnerHeartbeat(id: number): void {
   const db = getDb();
-  db.run("UPDATE runners SET last_seen = datetime('now') WHERE id = ?", [id]);
+  db.run("UPDATE runners SET last_seen = datetime('now') || 'Z' WHERE id = ?", [id]);
 }
 
 export function deleteRunner(id: number): boolean {
