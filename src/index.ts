@@ -54,9 +54,22 @@ import {
   handleCreateRepoSecret,
   handleDeleteRepoSecret,
 } from "./api/secrets";
+import { processScheduledPipelines } from "./pipeline/cron";
 
 // Initialize database on startup
 getDb();
+
+// Start scheduler loop (every 60 seconds)
+setInterval(() => {
+  processScheduledPipelines().catch((err) => {
+    console.error("Scheduler error:", err);
+  });
+}, 60 * 1000);
+
+// Run immediately on startup to catch up
+processScheduledPipelines().catch((err) => {
+  console.error("Scheduler error:", err);
+});
 
 const PORT = parseInt(process.env.PORT || "3000");
 const HOST = process.env.HOST || "0.0.0.0";

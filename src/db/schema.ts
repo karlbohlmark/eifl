@@ -43,6 +43,7 @@ function initSchema(db: Database) {
       repo_id INTEGER NOT NULL REFERENCES repos(id) ON DELETE CASCADE,
       name TEXT NOT NULL,
       config TEXT NOT NULL,
+      next_run_at TEXT,
       created_at TEXT DEFAULT (datetime('now') || 'Z'),
       UNIQUE(repo_id, name)
     );
@@ -132,6 +133,14 @@ function initSchema(db: Database) {
       console.log("Migrating database: adding tags to runners table");
       db.exec("ALTER TABLE runners ADD COLUMN tags TEXT DEFAULT '[]'");
     }
+
+    const pipelineTableInfo = db.prepare("PRAGMA table_info(pipelines);").all() as { name: string }[];
+    const hasNextRunAtColumn = pipelineTableInfo.some((column) => column.name === "next_run_at");
+
+    if (!hasNextRunAtColumn) {
+        console.log("Migrating database: adding next_run_at to pipelines table");
+        db.exec("ALTER TABLE pipelines ADD COLUMN next_run_at TEXT");
+    }
   } catch (error) {
     console.error("Migration check failed:", error);
   }
@@ -160,6 +169,7 @@ export interface Pipeline {
   repo_id: number;
   name: string;
   config: string;
+  next_run_at: string | null;
   created_at: string;
 }
 

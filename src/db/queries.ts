@@ -68,15 +68,27 @@ export function createPipeline(repoId: number, name: string, config: object): Pi
   return stmt.get(repoId, name, JSON.stringify(config)) as Pipeline;
 }
 
-export function upsertPipeline(repoId: number, name: string, config: object): Pipeline {
+export function upsertPipeline(repoId: number, name: string, config: object, nextRunAt?: Date): Pipeline {
   const db = getDb();
   const configJson = JSON.stringify(config);
+  const nextRunAtStr = nextRunAt ? nextRunAt.toISOString() : null;
   const stmt = db.prepare(`
-    INSERT INTO pipelines (repo_id, name, config) VALUES (?, ?, ?)
-    ON CONFLICT(repo_id, name) DO UPDATE SET config = excluded.config
+    INSERT INTO pipelines (repo_id, name, config, next_run_at) VALUES (?, ?, ?, ?)
+    ON CONFLICT(repo_id, name) DO UPDATE SET config = excluded.config, next_run_at = excluded.next_run_at
     RETURNING *
   `);
-  return stmt.get(repoId, name, configJson) as Pipeline;
+  return stmt.get(repoId, name, configJson, nextRunAtStr) as Pipeline;
+}
+
+export function updatePipelineNextRun(id: number, nextRunAt: Date): void {
+  const db = getDb();
+  db.run("UPDATE pipelines SET next_run_at = ? WHERE id = ?", [nextRunAt.toISOString(), id]);
+}
+
+export function getPipelinesDueForRun(): Pipeline[] {
+  const db = getDb();
+  // We use ISO string for next_run_at (from JS Date.toISOString()), so we need to compare with ISO string from SQLite
+  return db.query("SELECT * FROM pipelines WHERE next_run_at IS NOT NULL AND next_run_at <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now')").all() as Pipeline[];
 }
 
 export interface PipelineWithLatestRun extends Pipeline {

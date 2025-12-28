@@ -1,3 +1,5 @@
+import parser from "cron-parser";
+
 export interface PipelineStep {
   name: string;
   run: string;
@@ -5,11 +7,16 @@ export interface PipelineStep {
   if?: string;
 }
 
+export interface ScheduleTrigger {
+  cron: string;
+}
+
 export interface PipelineTriggers {
   push?: {
     branches?: string[];
   };
   manual?: boolean;
+  schedule?: ScheduleTrigger[];
 }
 
 export interface PipelineConfig {
@@ -139,6 +146,34 @@ export function validatePipelineConfig(config: unknown): PipelineConfig {
         throw new PipelineParseError("'triggers.manual' must be a boolean");
       }
       triggers.manual = t.manual;
+    }
+
+    if (t.schedule !== undefined) {
+      if (!Array.isArray(t.schedule)) {
+        throw new PipelineParseError("'triggers.schedule' must be an array");
+      }
+
+      const schedule: ScheduleTrigger[] = [];
+      for (let i = 0; i < t.schedule.length; i++) {
+        const s = t.schedule[i];
+        if (typeof s !== "object" || s === null) {
+          throw new PipelineParseError(`triggers.schedule[${i}] must be an object`);
+        }
+
+        const cron = (s as any).cron;
+        if (typeof cron !== "string" || cron.trim() === "") {
+          throw new PipelineParseError(`triggers.schedule[${i}] must have a non-empty 'cron' field`);
+        }
+
+        try {
+          parser.parse(cron);
+        } catch (e) {
+          throw new PipelineParseError(`triggers.schedule[${i}].cron is invalid: ${(e as Error).message}`);
+        }
+
+        schedule.push({ cron });
+      }
+      triggers.schedule = schedule;
     }
   }
 
