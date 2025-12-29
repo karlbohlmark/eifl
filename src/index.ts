@@ -83,6 +83,7 @@ const server = serve({
     "/project/*": index,
     "/repo/*": index,
     "/pipeline/*": index,
+    "/runners": index,
   },
   async fetch(req): Promise<Response> {
     const url = new URL(req.url);
