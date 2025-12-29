@@ -23,13 +23,54 @@ Default to using Bun instead of Node.js.
 
 Use `bun test` to run tests.
 
-```ts#index.test.ts
-import { test, expect } from "bun:test";
+**CRITICAL: Test Isolation**
 
-test("hello world", () => {
-  expect(1).toBe(1);
+⚠️ **NEVER write tests that use the production database!**
+
+All tests that interact with the database MUST:
+1. Set `process.env.DATA_DIR` to a test-specific directory in `beforeAll()`
+2. Call `resetDb()` after setting the environment variable to clear the database connection
+3. Clean up test data in `afterAll()`
+
+See `tests/test_schedule.test.ts` for the correct pattern:
+
+```ts#example.test.ts
+import { test, expect, beforeAll, afterAll } from "bun:test";
+import { getDb, resetDb } from "../src/db/schema";
+import { existsSync, rmSync } from "fs";
+
+const TEST_DATA_DIR = "./test-data-your-test-name";
+
+beforeAll(() => {
+  // Set environment variables for test isolation
+  process.env.DATA_DIR = TEST_DATA_DIR;
+
+  // Reset database connection to pick up new environment variables
+  resetDb();
+
+  // Clean up any existing test data
+  if (existsSync(TEST_DATA_DIR)) {
+    rmSync(TEST_DATA_DIR, { recursive: true, force: true });
+  }
+});
+
+afterAll(() => {
+  // Clean up test data
+  if (existsSync(TEST_DATA_DIR)) {
+    rmSync(TEST_DATA_DIR, { recursive: true, force: true });
+  }
+});
+
+test("your test", () => {
+  const db = getDb(); // Now uses ./test-data-your-test-name/eifl.db
+  // ... test code
 });
 ```
+
+**Why this matters:**
+- Without test isolation, tests create data in the production `./data/eifl.db` database
+- This pollutes production data and can break the application
+- Each test file should use a unique `TEST_DATA_DIR` name
 
 ## Frontend
 
