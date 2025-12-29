@@ -103,7 +103,7 @@ export function getPipelines(repoId: number): PipelineWithLatestRun[] {
     SELECT p.*,
            r.status as latest_run_status,
            r.id as latest_run_id,
-           r.created_at as latest_run_date
+           r.started_at as latest_run_date
     FROM pipelines p
     LEFT JOIN runs r ON r.id = (
       SELECT id FROM runs WHERE pipeline_id = p.id ORDER BY created_at DESC LIMIT 1
