@@ -6,8 +6,11 @@ import {
   updateRunnerStatus,
   updateRunnerHeartbeat,
   updateRunnerTags,
+  updateRunnerMaxConcurrency,
   getRunnerTags,
   deleteRunner,
+  incrementRunnerActiveJobs,
+  decrementRunnerActiveJobs,
   getPendingRuns,
   getRun,
   updateRunStatus,
@@ -26,7 +29,7 @@ import type { Run, Step, Runner } from "../db/schema";
 
 // Runner management
 export async function handleCreateRunner(req: Request): Promise<Response> {
-  const body = await req.json() as { name: string; tags?: string[] };
+  const body = await req.json() as { name: string; tags?: string[]; max_concurrency?: number };
 
   if (!body.name || typeof body.name !== "string") {
     return Response.json({ error: "Name is required" }, { status: 400 });
@@ -38,7 +41,13 @@ export async function handleCreateRunner(req: Request): Promise<Response> {
     return Response.json({ error: "Tags must be an array of strings" }, { status: 400 });
   }
 
-  const runner = createRunner(body.name, tags);
+  // Validate max_concurrency if provided
+  const maxConcurrency = body.max_concurrency ?? 1;
+  if (typeof maxConcurrency !== "number" || maxConcurrency < 1) {
+    return Response.json({ error: "max_concurrency must be a positive number" }, { status: 400 });
+  }
+
+  const runner = createRunner(body.name, tags, maxConcurrency);
   return Response.json(runner, { status: 201 });
 }
 
@@ -50,6 +59,22 @@ export async function handleUpdateRunnerTags(id: number, req: Request): Promise<
   }
 
   const success = updateRunnerTags(id, body.tags);
+  if (!success) {
+    return Response.json({ error: "Runner not found" }, { status: 404 });
+  }
+
+  const runner = getRunner(id);
+  return Response.json(runner);
+}
+
+export async function handleUpdateRunnerMaxConcurrency(id: number, req: Request): Promise<Response> {
+  const body = await req.json() as { max_concurrency: number };
+
+  if (typeof body.max_concurrency !== "number" || body.max_concurrency < 1) {
+    return Response.json({ error: "max_concurrency must be a positive number" }, { status: 400 });
+  }
+
+  const success = updateRunnerMaxConcurrency(id, body.max_concurrency);
   if (!success) {
     return Response.json({ error: "Runner not found" }, { status: 404 });
   }
@@ -111,6 +136,11 @@ export async function handlePollForJob(runner: Runner): Promise<Response> {
   // Update heartbeat
   updateRunnerHeartbeat(runner.id);
 
+  // Check if runner has capacity for more jobs
+  if (runner.active_jobs >= runner.max_concurrency) {
+    return Response.json({ job: null });
+  }
+
   // Get runner's tags
   const runnerTags = getRunnerTags(runner);
 
@@ -151,8 +181,18 @@ export async function handlePollForJob(runner: Runner): Promise<Response> {
   const pipeline = matchedPipeline;
   const repo = matchedRepo;
 
-  // Mark runner as busy and run as running
-  updateRunnerStatus(runner.id, "busy");
+  // Increment active jobs
+  incrementRunnerActiveJobs(runner.id);
+
+  // Mark runner as busy if at capacity, otherwise keep it online
+  const newActiveJobs = runner.active_jobs + 1;
+  if (newActiveJobs >= runner.max_concurrency) {
+    updateRunnerStatus(runner.id, "busy");
+  } else {
+    updateRunnerStatus(runner.id, "online");
+  }
+
+  // Mark run as running
   updateRunStatus(run.id, "running");
 
   // Update GitHub status to pending/running
@@ -290,7 +330,10 @@ export async function handleRunComplete(runner: Runner, req: Request): Promise<R
     }
   }
 
-  // Mark runner as available
+  // Decrement active jobs
+  decrementRunnerActiveJobs(runner.id);
+
+  // Mark runner as available (always online after completing a job)
   updateRunnerStatus(runner.id, "online");
 
   return Response.json({ success: true });

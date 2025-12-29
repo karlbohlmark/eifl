@@ -10,6 +10,8 @@ interface Runner {
   name: string;
   status: "online" | "offline" | "busy";
   tags: string[];
+  max_concurrency: number;
+  active_jobs: number;
   last_seen: string | null;
   created_at: string;
 }
@@ -18,10 +20,13 @@ export function Runners() {
   const [runners, setRunners] = useState<Runner[]>([]);
   const [newRunnerName, setNewRunnerName] = useState("");
   const [newRunnerTags, setNewRunnerTags] = useState("");
+  const [newRunnerMaxConcurrency, setNewRunnerMaxConcurrency] = useState("1");
   const [showNewRunner, setShowNewRunner] = useState(false);
   const [loading, setLoading] = useState(true);
   const [editingTags, setEditingTags] = useState<number | null>(null);
   const [editTagsValue, setEditTagsValue] = useState("");
+  const [editingConcurrency, setEditingConcurrency] = useState<number | null>(null);
+  const [editConcurrencyValue, setEditConcurrencyValue] = useState("");
 
   useEffect(() => {
     fetchRunners();
@@ -47,11 +52,17 @@ export function Runners() {
       .map((t) => t.trim())
       .filter(Boolean);
 
+    const maxConcurrency = parseInt(newRunnerMaxConcurrency, 10);
+    if (isNaN(maxConcurrency) || maxConcurrency < 1) {
+      alert("Max concurrency must be a positive number");
+      return;
+    }
+
     try {
       const res = await fetch("/api/runners", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newRunnerName, tags }),
+        body: JSON.stringify({ name: newRunnerName, tags, max_concurrency: maxConcurrency }),
       });
 
       if (res.ok) {
@@ -60,6 +71,7 @@ export function Runners() {
         alert(`Runner created! Token: ${runner.token}\n\nSave this token - it won't be shown again.`);
         setNewRunnerName("");
         setNewRunnerTags("");
+        setNewRunnerMaxConcurrency("1");
         setShowNewRunner(false);
         fetchRunners();
       }
@@ -107,6 +119,34 @@ export function Runners() {
   function startEditingTags(runner: Runner) {
     setEditingTags(runner.id);
     setEditTagsValue(runner.tags.join(", "));
+  }
+
+  async function updateMaxConcurrency(id: number) {
+    const maxConcurrency = parseInt(editConcurrencyValue, 10);
+    if (isNaN(maxConcurrency) || maxConcurrency < 1) {
+      alert("Max concurrency must be a positive number");
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/runners/${id}/concurrency`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ max_concurrency: maxConcurrency }),
+      });
+
+      if (res.ok) {
+        setEditingConcurrency(null);
+        fetchRunners();
+      }
+    } catch (error) {
+      console.error("Failed to update max concurrency:", error);
+    }
+  }
+
+  function startEditingConcurrency(runner: Runner) {
+    setEditingConcurrency(runner.id);
+    setEditConcurrencyValue(runner.max_concurrency.toString());
   }
 
   function getStatusColor(status: string) {
@@ -160,7 +200,7 @@ export function Runners() {
         <Card className="mb-6">
           <CardContent className="pt-6">
             <div className="space-y-4">
-              <div className="flex gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <Input
                   placeholder="Runner name"
                   value={newRunnerName}
@@ -170,6 +210,13 @@ export function Runners() {
                   placeholder="Tags (comma-separated, e.g. performance, linux)"
                   value={newRunnerTags}
                   onChange={(e) => setNewRunnerTags(e.target.value)}
+                />
+                <Input
+                  type="number"
+                  min="1"
+                  placeholder="Max concurrency"
+                  value={newRunnerMaxConcurrency}
+                  onChange={(e) => setNewRunnerMaxConcurrency(e.target.value)}
                 />
               </div>
               <div className="flex gap-2">
@@ -207,6 +254,9 @@ export function Runners() {
                     <span>{runner.name}</span>
                     <span className="text-sm font-normal text-muted-foreground">
                       ({getStatusText(runner.status)})
+                    </span>
+                    <span className="text-xs font-normal text-muted-foreground bg-muted px-2 py-1 rounded">
+                      {runner.active_jobs}/{runner.max_concurrency} jobs
                     </span>
                   </div>
                   <Button
@@ -271,6 +321,45 @@ export function Runners() {
                     </>
                   )}
                 </div>
+                <div className="flex items-center gap-2 flex-wrap mt-3">
+                  <span className="text-sm text-muted-foreground">Max Concurrency:</span>
+                  {editingConcurrency === runner.id ? (
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        min="1"
+                        className="w-24"
+                        value={editConcurrencyValue}
+                        onChange={(e) => setEditConcurrencyValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") updateMaxConcurrency(runner.id);
+                          if (e.key === "Escape") setEditingConcurrency(null);
+                        }}
+                      />
+                      <Button size="sm" onClick={() => updateMaxConcurrency(runner.id)}>
+                        Save
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setEditingConcurrency(null)}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  ) : (
+                    <>
+                      <span className="font-medium">{runner.max_concurrency}</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => startEditingConcurrency(runner)}
+                      >
+                        Edit
+                      </Button>
+                    </>
+                  )}
+                </div>
                 {runner.last_seen && (
                   <p className="text-xs text-muted-foreground mt-2">
                     Last seen: {new Date(runner.last_seen).toLocaleString()}
@@ -284,16 +373,27 @@ export function Runners() {
 
       <Card className="mt-8">
         <CardHeader>
-          <CardTitle className="text-lg">Using Runner Tags</CardTitle>
+          <CardTitle className="text-lg">Runner Configuration</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4 text-sm text-muted-foreground">
-          <p>
-            Runner tags allow you to control which runners execute specific pipelines.
-            For example, you can tag runners with "performance" and require that tag
-            in your pipeline config.
-          </p>
-          <div className="bg-muted p-4 rounded font-mono text-xs">
-            <pre>{`// .eifl.json
+          <div>
+            <h3 className="font-semibold text-foreground mb-2">Concurrency</h3>
+            <p>
+              The <strong>max concurrency</strong> setting controls how many jobs a runner can execute simultaneously.
+              For example, a 16-core server with max_concurrency=8 can run 8 pipeline jobs at once,
+              maximizing your compute resources.
+            </p>
+          </div>
+
+          <div>
+            <h3 className="font-semibold text-foreground mb-2">Runner Tags</h3>
+            <p>
+              Runner tags allow you to control which runners execute specific pipelines.
+              For example, you can tag runners with "performance" and require that tag
+              in your pipeline config.
+            </p>
+            <div className="bg-muted p-4 rounded font-mono text-xs mt-2">
+              <pre>{`// .eifl.json
 {
   "name": "performance-tests",
   "runner_tags": ["performance", "linux"],
@@ -301,11 +401,12 @@ export function Runners() {
     { "name": "benchmark", "run": "./run-benchmarks.sh" }
   ]
 }`}</pre>
+            </div>
+            <p className="mt-2">
+              A runner must have <strong>all</strong> specified tags to pick up the job.
+              If no runner_tags are specified, any runner can execute the pipeline.
+            </p>
           </div>
-          <p>
-            A runner must have <strong>all</strong> specified tags to pick up the job.
-            If no runner_tags are specified, any runner can execute the pipeline.
-          </p>
         </CardContent>
       </Card>
     </div>

@@ -224,12 +224,12 @@ export function getMetricHistory(pipelineId: number, key: string, limit = 100): 
 }
 
 // Runners
-export function createRunner(name: string, tags: string[] = []): Runner {
+export function createRunner(name: string, tags: string[] = [], maxConcurrency: number = 1): Runner {
   const db = getDb();
   const token = crypto.randomUUID();
   const tagsJson = JSON.stringify(tags);
-  const stmt = db.prepare("INSERT INTO runners (name, token, tags) VALUES (?, ?, ?) RETURNING *");
-  return stmt.get(name, token, tagsJson) as Runner;
+  const stmt = db.prepare("INSERT INTO runners (name, token, tags, max_concurrency) VALUES (?, ?, ?, ?) RETURNING *");
+  return stmt.get(name, token, tagsJson, maxConcurrency) as Runner;
 }
 
 export function updateRunnerTags(id: number, tags: string[]): boolean {
@@ -270,6 +270,22 @@ export function updateRunnerStatus(id: number, status: RunnerStatus): void {
 export function updateRunnerHeartbeat(id: number): void {
   const db = getDb();
   db.run("UPDATE runners SET last_seen = datetime('now') || 'Z' WHERE id = ?", [id]);
+}
+
+export function updateRunnerMaxConcurrency(id: number, maxConcurrency: number): boolean {
+  const db = getDb();
+  const result = db.run("UPDATE runners SET max_concurrency = ? WHERE id = ?", [maxConcurrency, id]);
+  return result.changes > 0;
+}
+
+export function incrementRunnerActiveJobs(id: number): void {
+  const db = getDb();
+  db.run("UPDATE runners SET active_jobs = active_jobs + 1, last_seen = datetime('now') || 'Z' WHERE id = ?", [id]);
+}
+
+export function decrementRunnerActiveJobs(id: number): void {
+  const db = getDb();
+  db.run("UPDATE runners SET active_jobs = CASE WHEN active_jobs > 0 THEN active_jobs - 1 ELSE 0 END, last_seen = datetime('now') || 'Z' WHERE id = ?", [id]);
 }
 
 export function deleteRunner(id: number): boolean {

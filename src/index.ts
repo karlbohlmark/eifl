@@ -38,6 +38,7 @@ import {
   handleGetRunners,
   handleDeleteRunner,
   handleUpdateRunnerTags,
+  handleUpdateRunnerMaxConcurrency,
   authenticateRunner,
   handlePollForJob,
   handleStepUpdate,
@@ -323,6 +324,11 @@ async function handleApiRequest(
   const runnerTagsMatch = path.match(/^runners\/(\d+)\/tags$/);
   if (runnerTagsMatch && (method === "PUT" || method === "PATCH")) {
     return handleUpdateRunnerTags(parseInt(runnerTagsMatch[1]!), req);
+  }
+
+  const runnerConcurrencyMatch = path.match(/^runners\/(\d+)\/concurrency$/);
+  if (runnerConcurrencyMatch && (method === "PUT" || method === "PATCH")) {
+    return handleUpdateRunnerMaxConcurrency(parseInt(runnerConcurrencyMatch[1]!), req);
   }
 
   // Runner API (authenticated)

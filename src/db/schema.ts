@@ -96,6 +96,8 @@ function initSchema(db: Database) {
       token TEXT NOT NULL UNIQUE,
       status TEXT NOT NULL DEFAULT 'offline',
       tags TEXT DEFAULT '[]',
+      max_concurrency INTEGER NOT NULL DEFAULT 1,
+      active_jobs INTEGER NOT NULL DEFAULT 0,
       last_seen TEXT,
       created_at TEXT DEFAULT (datetime('now') || 'Z')
     );
@@ -151,6 +153,21 @@ function initSchema(db: Database) {
     if (!hasNextRunAtColumn) {
       console.log("Migrating database: adding next_run_at to pipelines table");
       db.exec("ALTER TABLE pipelines ADD COLUMN next_run_at TEXT");
+    }
+
+    // Check if max_concurrency and active_jobs columns exist on runners table
+    const runnerTableInfo2 = db.prepare("PRAGMA table_info(runners);").all() as { name: string }[];
+    const hasMaxConcurrencyColumn = runnerTableInfo2.some((column) => column.name === "max_concurrency");
+    const hasActiveJobsColumn = runnerTableInfo2.some((column) => column.name === "active_jobs");
+
+    if (!hasMaxConcurrencyColumn) {
+      console.log("Migrating database: adding max_concurrency to runners table");
+      db.exec("ALTER TABLE runners ADD COLUMN max_concurrency INTEGER NOT NULL DEFAULT 1");
+    }
+
+    if (!hasActiveJobsColumn) {
+      console.log("Migrating database: adding active_jobs to runners table");
+      db.exec("ALTER TABLE runners ADD COLUMN active_jobs INTEGER NOT NULL DEFAULT 0");
     }
   } catch (error) {
     console.error("Migration check failed:", error);
@@ -229,6 +246,8 @@ export interface Runner {
   token: string;
   status: RunnerStatus;
   tags: string; // JSON array of tag strings
+  max_concurrency: number;
+  active_jobs: number;
   last_seen: string | null;
   created_at: string;
 }
