@@ -5,7 +5,7 @@ import {
   getProjectByName,
   deleteProject,
   createRepo,
-  getRepos,
+  getReposWithLatestBuildStatus,
   getRepo,
   deleteRepo,
 } from "../db/queries";
@@ -86,7 +86,7 @@ export function handleGetRepos(projectId: number): Response {
     return Response.json({ error: "Project not found" }, { status: 404 });
   }
 
-  const repos = getRepos(projectId);
+  const repos = getReposWithLatestBuildStatus(projectId);
   return Response.json(repos);
 }
 

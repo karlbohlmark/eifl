@@ -40,6 +40,31 @@ export function getRepos(projectId: number): Repo[] {
   return db.query("SELECT * FROM repos WHERE project_id = ? ORDER BY name").all(projectId) as Repo[];
 }
 
+export interface RepoWithLatestBuildStatus extends Repo {
+  latest_run_status: RunStatus | null;
+  latest_run_id: number | null;
+  latest_run_date: string | null;
+}
+
+export function getReposWithLatestBuildStatus(projectId: number): RepoWithLatestBuildStatus[] {
+  const db = getDb();
+  return db.query(`
+    SELECT r.*,
+           latest.status as latest_run_status,
+           latest.id as latest_run_id,
+           latest.started_at as latest_run_date
+    FROM repos r
+    LEFT JOIN (
+      SELECT runs.*, pipelines.repo_id,
+             ROW_NUMBER() OVER (PARTITION BY pipelines.repo_id ORDER BY runs.created_at DESC) as rn
+      FROM runs
+      JOIN pipelines ON runs.pipeline_id = pipelines.id
+    ) latest ON latest.repo_id = r.id AND latest.rn = 1
+    WHERE r.project_id = ?
+    ORDER BY r.name
+  `).all(projectId) as RepoWithLatestBuildStatus[];
+}
+
 export function getRepo(id: number): Repo | null {
   const db = getDb();
   return db.query("SELECT * FROM repos WHERE id = ?").get(id) as Repo | null;

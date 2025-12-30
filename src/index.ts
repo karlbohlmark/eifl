@@ -55,6 +55,7 @@ import {
   handleCreateRepoSecret,
   handleDeleteRepoSecret,
 } from "./api/secrets";
+import { handleGetDocs, handleGetDoc } from "./api/docs";
 import { processScheduledPipelines } from "./pipeline/cron";
 
 // Initialize database on startup
@@ -85,6 +86,8 @@ const server = serve({
     "/repo/*": index,
     "/pipeline/*": index,
     "/runners": index,
+    "/docs": index,
+    "/docs/*": index,
   },
   async fetch(req): Promise<Response> {
     const url = new URL(req.url);
@@ -370,6 +373,16 @@ async function handleApiRequest(
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
     return handleRunnerHeartbeat(runner);
+  }
+
+  // Documentation
+  if (path === "docs" && method === "GET") {
+    return handleGetDocs();
+  }
+
+  const docMatch = path.match(/^docs\/([^/]+)$/);
+  if (docMatch && method === "GET") {
+    return handleGetDoc(docMatch[1]!);
   }
 
   return Response.json({ error: "Not found" }, { status: 404 });

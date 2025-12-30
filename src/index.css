@@ -14,6 +14,85 @@
   }
 }
 
+/* Markdown content styles */
+.markdown-content h1 {
+  @apply text-3xl font-bold mb-4 mt-8 first:mt-0;
+}
+
+.markdown-content h2 {
+  @apply text-2xl font-semibold mb-3 mt-6 pb-2 border-b;
+}
+
+.markdown-content h3 {
+  @apply text-xl font-medium mb-2 mt-5;
+}
+
+.markdown-content h4 {
+  @apply text-lg font-medium mb-2 mt-4;
+}
+
+.markdown-content p {
+  @apply mb-4 leading-relaxed;
+}
+
+.markdown-content code {
+  @apply bg-muted px-1.5 py-0.5 rounded text-sm font-mono;
+}
+
+.markdown-content pre {
+  @apply bg-muted p-4 rounded-lg overflow-x-auto mb-4 border;
+}
+
+.markdown-content pre code {
+  @apply bg-transparent p-0;
+}
+
+.markdown-content ul {
+  @apply list-disc list-outside ml-6 mb-4 space-y-1;
+}
+
+.markdown-content ol {
+  @apply list-decimal list-outside ml-6 mb-4 space-y-1;
+}
+
+.markdown-content li {
+  @apply leading-relaxed;
+}
+
+.markdown-content li > ul,
+.markdown-content li > ol {
+  @apply mt-1 mb-0;
+}
+
+.markdown-content a {
+  @apply text-primary underline underline-offset-2 hover:no-underline;
+}
+
+.markdown-content blockquote {
+  @apply border-l-4 border-muted-foreground/30 pl-4 italic my-4 text-muted-foreground;
+}
+
+.markdown-content table {
+  @apply w-full border-collapse mb-4;
+}
+
+.markdown-content th,
+.markdown-content td {
+  @apply border border-border p-2 text-left;
+}
+
+.markdown-content th {
+  @apply bg-muted font-medium;
+}
+
+.markdown-content hr {
+  @apply my-8 border-border;
+}
+
+.markdown-content strong {
+  @apply font-semibold;
+}
+
 /* cool Bun background animation 😎 */
 body::before {
   content: "";

@@ -4,9 +4,19 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, GitBranch, ArrowLeft, Copy, Check, Github } from "lucide-react";
+import { Plus, GitBranch, ArrowLeft, Copy, Check, Github, Clock, Loader2, CheckCircle, XCircle } from "lucide-react";
 import { GitHubRepoForm } from "@/components/GitHubRepoForm";
 import { SecretsManager } from "@/components/SecretsManager";
+
+type RunStatus = "pending" | "running" | "success" | "failed" | "cancelled";
+
+const STATUS_ICONS: Record<RunStatus, React.ReactNode> = {
+  pending: <Clock className="w-4 h-4 text-muted-foreground" />,
+  running: <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />,
+  success: <CheckCircle className="w-4 h-4 text-green-500" />,
+  failed: <XCircle className="w-4 h-4 text-red-500" />,
+  cancelled: <XCircle className="w-4 h-4 text-muted-foreground" />,
+};
 
 interface Project {
   id: number;
@@ -22,6 +32,9 @@ interface Repo {
   path: string;
   remote_url: string | null;
   created_at: string;
+  latest_run_status: RunStatus | null;
+  latest_run_id: number | null;
+  latest_run_date: string | null;
 }
 
 export function Project() {
@@ -207,6 +220,12 @@ export function Project() {
                   <Link to={`/repo/${repo.id}`} className="hover:underline">
                     {repo.name}
                   </Link>
+                  {repo.latest_run_status && (
+                    <div className="flex items-center gap-1.5 ml-auto text-sm text-muted-foreground">
+                      {STATUS_ICONS[repo.latest_run_status]}
+                      <span className="capitalize">{repo.latest_run_status}</span>
+                    </div>
+                  )}
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-0">

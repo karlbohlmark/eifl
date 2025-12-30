@@ -7,7 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ChevronRight, Home, FolderKanban, Server } from "lucide-react";
+import { ChevronRight, Home, FolderKanban, Server, BookOpen } from "lucide-react";
 
 interface Project {
   id: number;
@@ -162,8 +162,15 @@ export function Navbar() {
           )}
         </div>
 
-        {/* Quick Project Switcher and Runners Link */}
+        {/* Quick Project Switcher and Navigation Links */}
         <div className="flex items-center gap-4">
+          <Link
+            to="/docs"
+            className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <BookOpen className="w-4 h-4" />
+            <span className="hidden sm:inline">Docs</span>
+          </Link>
           <Link
             to="/runners"
             className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
