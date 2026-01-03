@@ -137,6 +137,54 @@ function initSchema(db: Database) {
     CREATE INDEX IF NOT EXISTS idx_baselines_pipeline ON baselines(pipeline_id);
     CREATE INDEX IF NOT EXISTS idx_baselines_key ON baselines(key);
     CREATE INDEX IF NOT EXISTS idx_secrets_scope ON secrets(scope, scope_id);
+
+    -- Coordination tables for multi-machine testing
+    CREATE TABLE IF NOT EXISTS coordination_sessions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id TEXT NOT NULL UNIQUE,
+      run_id INTEGER REFERENCES runs(id) ON DELETE CASCADE,
+      expected_participants INTEGER NOT NULL DEFAULT 2,
+      current_participants INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'waiting',
+      created_at TEXT DEFAULT (datetime('now') || 'Z'),
+      expires_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS coordination_participants (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id TEXT NOT NULL REFERENCES coordination_sessions(session_id) ON DELETE CASCADE,
+      runner_id INTEGER NOT NULL REFERENCES runners(id) ON DELETE CASCADE,
+      role TEXT,
+      joined_at TEXT DEFAULT (datetime('now') || 'Z'),
+      UNIQUE(session_id, runner_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS coordination_barriers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id TEXT NOT NULL REFERENCES coordination_sessions(session_id) ON DELETE CASCADE,
+      barrier_name TEXT NOT NULL,
+      expected_count INTEGER NOT NULL,
+      current_count INTEGER NOT NULL DEFAULT 0,
+      released INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now') || 'Z'),
+      released_at TEXT,
+      UNIQUE(session_id, barrier_name)
+    );
+
+    CREATE TABLE IF NOT EXISTS coordination_signals (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id TEXT NOT NULL REFERENCES coordination_sessions(session_id) ON DELETE CASCADE,
+      signal_name TEXT NOT NULL,
+      sender_runner_id INTEGER NOT NULL REFERENCES runners(id) ON DELETE CASCADE,
+      data TEXT,
+      created_at TEXT DEFAULT (datetime('now') || 'Z')
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_coordination_sessions_run ON coordination_sessions(run_id);
+    CREATE INDEX IF NOT EXISTS idx_coordination_sessions_status ON coordination_sessions(status);
+    CREATE INDEX IF NOT EXISTS idx_coordination_participants_session ON coordination_participants(session_id);
+    CREATE INDEX IF NOT EXISTS idx_coordination_barriers_session ON coordination_barriers(session_id);
+    CREATE INDEX IF NOT EXISTS idx_coordination_signals_session ON coordination_signals(session_id);
   `);
 
   // Migrations
@@ -289,4 +337,46 @@ export interface Secret {
   iv: string;
   created_at: string;
   updated_at: string;
+}
+
+// Coordination types for multi-machine testing
+export type CoordinationSessionStatus = "waiting" | "active" | "completed" | "expired";
+
+export interface CoordinationSession {
+  id: number;
+  session_id: string;
+  run_id: number | null;
+  expected_participants: number;
+  current_participants: number;
+  status: CoordinationSessionStatus;
+  created_at: string;
+  expires_at: string | null;
+}
+
+export interface CoordinationParticipant {
+  id: number;
+  session_id: string;
+  runner_id: number;
+  role: string | null;
+  joined_at: string;
+}
+
+export interface CoordinationBarrier {
+  id: number;
+  session_id: string;
+  barrier_name: string;
+  expected_count: number;
+  current_count: number;
+  released: number;
+  created_at: string;
+  released_at: string | null;
+}
+
+export interface CoordinationSignal {
+  id: number;
+  session_id: string;
+  signal_name: string;
+  sender_runner_id: number;
+  data: string | null;
+  created_at: string;
 }

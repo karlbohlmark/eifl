@@ -1,4 +1,4 @@
-import { getDb, type Project, type Repo, type Pipeline, type Run, type Step, type Metric, type Baseline, type Runner, type Secret, type RunStatus, type StepStatus, type RunnerStatus, type SecretScope } from "./schema";
+import { getDb, type Project, type Repo, type Pipeline, type Run, type Step, type Metric, type Baseline, type Runner, type Secret, type RunStatus, type StepStatus, type RunnerStatus, type SecretScope, type CoordinationSession, type CoordinationParticipant, type CoordinationBarrier, type CoordinationSignal, type CoordinationSessionStatus } from "./schema";
 
 // Projects
 export function createProject(name: string, description?: string): Project {
@@ -476,4 +476,257 @@ export function getSecretsForRepo(repoId: number): Secret[] {
   }
 
   return Array.from(merged.values()).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// Coordination - Sessions
+export function createCoordinationSession(
+  sessionId: string,
+  expectedParticipants: number,
+  runId?: number,
+  expiresInMs: number = 5 * 60 * 1000 // 5 minutes default
+): CoordinationSession {
+  const db = getDb();
+  const expiresAt = new Date(Date.now() + expiresInMs).toISOString();
+  const stmt = db.prepare(`
+    INSERT INTO coordination_sessions (session_id, run_id, expected_participants, expires_at)
+    VALUES (?, ?, ?, ?)
+    RETURNING *
+  `);
+  return stmt.get(sessionId, runId ?? null, expectedParticipants, expiresAt) as CoordinationSession;
+}
+
+export function getCoordinationSession(sessionId: string): CoordinationSession | null {
+  const db = getDb();
+  return db.query("SELECT * FROM coordination_sessions WHERE session_id = ?").get(sessionId) as CoordinationSession | null;
+}
+
+export function updateCoordinationSessionStatus(sessionId: string, status: CoordinationSessionStatus): boolean {
+  const db = getDb();
+  const result = db.run("UPDATE coordination_sessions SET status = ? WHERE session_id = ?", [status, sessionId]);
+  return result.changes > 0;
+}
+
+export function expireOldCoordinationSessions(): number {
+  const db = getDb();
+  const result = db.run(`
+    UPDATE coordination_sessions
+    SET status = 'expired'
+    WHERE status IN ('waiting', 'active')
+      AND expires_at IS NOT NULL
+      AND expires_at < datetime('now') || 'Z'
+  `);
+  return result.changes;
+}
+
+export function deleteCoordinationSession(sessionId: string): boolean {
+  const db = getDb();
+  const result = db.run("DELETE FROM coordination_sessions WHERE session_id = ?", [sessionId]);
+  return result.changes > 0;
+}
+
+// Coordination - Participants
+export function joinCoordinationSession(
+  sessionId: string,
+  runnerId: number,
+  role?: string
+): CoordinationParticipant | null {
+  const db = getDb();
+
+  // Check if session exists and is joinable
+  const session = getCoordinationSession(sessionId);
+  if (!session || session.status === 'expired' || session.status === 'completed') {
+    return null;
+  }
+
+  // Check if session is full
+  if (session.current_participants >= session.expected_participants) {
+    return null;
+  }
+
+  try {
+    const stmt = db.prepare(`
+      INSERT INTO coordination_participants (session_id, runner_id, role)
+      VALUES (?, ?, ?)
+      RETURNING *
+    `);
+    const participant = stmt.get(sessionId, runnerId, role ?? null) as CoordinationParticipant;
+
+    // Update participant count
+    db.run(`
+      UPDATE coordination_sessions
+      SET current_participants = current_participants + 1,
+          status = CASE
+            WHEN current_participants + 1 >= expected_participants THEN 'active'
+            ELSE status
+          END
+      WHERE session_id = ?
+    `, [sessionId]);
+
+    return participant;
+  } catch (e: any) {
+    // Duplicate participant - runner already joined
+    if (e.message?.includes('UNIQUE constraint failed')) {
+      return db.query(
+        "SELECT * FROM coordination_participants WHERE session_id = ? AND runner_id = ?"
+      ).get(sessionId, runnerId) as CoordinationParticipant;
+    }
+    throw e;
+  }
+}
+
+export function getCoordinationParticipants(sessionId: string): CoordinationParticipant[] {
+  const db = getDb();
+  return db.query(
+    "SELECT * FROM coordination_participants WHERE session_id = ? ORDER BY joined_at"
+  ).all(sessionId) as CoordinationParticipant[];
+}
+
+export function isParticipantInSession(sessionId: string, runnerId: number): boolean {
+  const db = getDb();
+  const result = db.query(
+    "SELECT 1 FROM coordination_participants WHERE session_id = ? AND runner_id = ?"
+  ).get(sessionId, runnerId);
+  return result !== null;
+}
+
+// Coordination - Barriers
+export function createOrIncrementBarrier(
+  sessionId: string,
+  barrierName: string,
+  expectedCount?: number
+): { barrier: CoordinationBarrier; released: boolean } {
+  const db = getDb();
+
+  // Get session to determine expected count if not provided
+  const session = getCoordinationSession(sessionId);
+  if (!session) {
+    throw new Error("Session not found");
+  }
+
+  const count = expectedCount ?? session.expected_participants;
+
+  // Try to create or increment the barrier atomically
+  const existing = db.query(
+    "SELECT * FROM coordination_barriers WHERE session_id = ? AND barrier_name = ?"
+  ).get(sessionId, barrierName) as CoordinationBarrier | null;
+
+  if (existing) {
+    if (existing.released) {
+      // Already released, just return
+      return { barrier: existing, released: true };
+    }
+
+    // Increment counter
+    const newCount = existing.current_count + 1;
+    const shouldRelease = newCount >= existing.expected_count;
+
+    if (shouldRelease) {
+      db.run(`
+        UPDATE coordination_barriers
+        SET current_count = ?, released = 1, released_at = datetime('now') || 'Z'
+        WHERE session_id = ? AND barrier_name = ?
+      `, [newCount, sessionId, barrierName]);
+    } else {
+      db.run(`
+        UPDATE coordination_barriers SET current_count = ?
+        WHERE session_id = ? AND barrier_name = ?
+      `, [newCount, sessionId, barrierName]);
+    }
+
+    const updated = db.query(
+      "SELECT * FROM coordination_barriers WHERE session_id = ? AND barrier_name = ?"
+    ).get(sessionId, barrierName) as CoordinationBarrier;
+
+    return { barrier: updated, released: shouldRelease };
+  } else {
+    // Create new barrier
+    const shouldRelease = count <= 1;
+    const stmt = db.prepare(`
+      INSERT INTO coordination_barriers (session_id, barrier_name, expected_count, current_count, released, released_at)
+      VALUES (?, ?, ?, 1, ?, CASE WHEN ? THEN datetime('now') || 'Z' ELSE NULL END)
+      RETURNING *
+    `);
+    const barrier = stmt.get(sessionId, barrierName, count, shouldRelease ? 1 : 0, shouldRelease) as CoordinationBarrier;
+    return { barrier, released: shouldRelease };
+  }
+}
+
+export function getBarrier(sessionId: string, barrierName: string): CoordinationBarrier | null {
+  const db = getDb();
+  return db.query(
+    "SELECT * FROM coordination_barriers WHERE session_id = ? AND barrier_name = ?"
+  ).get(sessionId, barrierName) as CoordinationBarrier | null;
+}
+
+export function getBarriers(sessionId: string): CoordinationBarrier[] {
+  const db = getDb();
+  return db.query(
+    "SELECT * FROM coordination_barriers WHERE session_id = ? ORDER BY created_at"
+  ).all(sessionId) as CoordinationBarrier[];
+}
+
+// Coordination - Signals
+export function sendSignal(
+  sessionId: string,
+  signalName: string,
+  senderRunnerId: number,
+  data?: string | object
+): CoordinationSignal {
+  const db = getDb();
+  const dataStr = data ? (typeof data === 'string' ? data : JSON.stringify(data)) : null;
+  const stmt = db.prepare(`
+    INSERT INTO coordination_signals (session_id, signal_name, sender_runner_id, data)
+    VALUES (?, ?, ?, ?)
+    RETURNING *
+  `);
+  return stmt.get(sessionId, signalName, senderRunnerId, dataStr) as CoordinationSignal;
+}
+
+export function getSignals(sessionId: string, signalName?: string, afterId?: number): CoordinationSignal[] {
+  const db = getDb();
+  if (signalName && afterId) {
+    return db.query(
+      "SELECT * FROM coordination_signals WHERE session_id = ? AND signal_name = ? AND id > ? ORDER BY id"
+    ).all(sessionId, signalName, afterId) as CoordinationSignal[];
+  } else if (signalName) {
+    return db.query(
+      "SELECT * FROM coordination_signals WHERE session_id = ? AND signal_name = ? ORDER BY id"
+    ).all(sessionId, signalName) as CoordinationSignal[];
+  } else if (afterId) {
+    return db.query(
+      "SELECT * FROM coordination_signals WHERE session_id = ? AND id > ? ORDER BY id"
+    ).all(sessionId, afterId) as CoordinationSignal[];
+  } else {
+    return db.query(
+      "SELECT * FROM coordination_signals WHERE session_id = ? ORDER BY id"
+    ).all(sessionId) as CoordinationSignal[];
+  }
+}
+
+export function waitForSignal(
+  sessionId: string,
+  signalName: string,
+  timeoutMs: number = 30000
+): Promise<CoordinationSignal | null> {
+  const startTime = Date.now();
+  const pollInterval = 100; // 100ms
+
+  return new Promise((resolve) => {
+    const poll = () => {
+      const signals = getSignals(sessionId, signalName);
+      if (signals.length > 0) {
+        resolve(signals[0] ?? null);
+        return;
+      }
+
+      if (Date.now() - startTime > timeoutMs) {
+        resolve(null);
+        return;
+      }
+
+      setTimeout(poll, pollInterval);
+    };
+
+    poll();
+  });
 }

@@ -52,6 +52,17 @@ import {
   handleRunComplete,
   handleRunnerHeartbeat,
 } from "./api/runner";
+import {
+  handleCreateSession,
+  handleGetSession,
+  handleDeleteSession,
+  handleJoin,
+  handleBarrier,
+  handleGetBarrier,
+  handleSignal,
+  handleGetSignals,
+  handleComplete,
+} from "./api/coordination";
 import { handleGithubWebhook, handleVerifyGitHubRepo } from "./api/github";
 import {
   handleGetProjectSecrets,
@@ -403,6 +414,75 @@ async function handleApiRequest(
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
     return handleRunnerHeartbeat(runner);
+  }
+
+  // Coordination API (authenticated by runner token)
+  if (path === "coordination/session" && method === "POST") {
+    const runner = authenticateRunner(req);
+    if (!runner) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    return handleCreateSession(runner, req);
+  }
+
+  const coordSessionMatch = path.match(/^coordination\/session\/([^/]+)$/);
+  if (coordSessionMatch) {
+    const sessionId = decodeURIComponent(coordSessionMatch[1]!);
+    if (method === "GET") {
+      return handleGetSession(sessionId);
+    }
+    if (method === "DELETE") {
+      const runner = authenticateRunner(req);
+      if (!runner) {
+        return Response.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      return handleDeleteSession(runner, sessionId);
+    }
+  }
+
+  if (path === "coordination/join" && method === "POST") {
+    const runner = authenticateRunner(req);
+    if (!runner) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    return handleJoin(runner, req);
+  }
+
+  if (path === "coordination/barrier" && method === "POST") {
+    const runner = authenticateRunner(req);
+    if (!runner) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    return handleBarrier(runner, req);
+  }
+
+  const coordBarrierMatch = path.match(/^coordination\/barrier\/([^/]+)\/([^/]+)$/);
+  if (coordBarrierMatch && method === "GET") {
+    const sessionId = decodeURIComponent(coordBarrierMatch[1]!);
+    const barrierName = decodeURIComponent(coordBarrierMatch[2]!);
+    return handleGetBarrier(sessionId, barrierName);
+  }
+
+  if (path === "coordination/signal" && method === "POST") {
+    const runner = authenticateRunner(req);
+    if (!runner) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    return handleSignal(runner, req);
+  }
+
+  const coordSignalsMatch = path.match(/^coordination\/signals\/([^/]+)$/);
+  if (coordSignalsMatch && method === "GET") {
+    const sessionId = decodeURIComponent(coordSignalsMatch[1]!);
+    return handleGetSignals(sessionId, url);
+  }
+
+  if (path === "coordination/complete" && method === "POST") {
+    const runner = authenticateRunner(req);
+    if (!runner) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    return handleComplete(runner, req);
   }
 
   // Documentation
