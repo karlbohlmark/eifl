@@ -306,7 +306,13 @@ export function compareMetricsToBaselines(runId: number): BaselineComparison[] {
     WHERE m.run_id = ?
     ORDER BY m.key
   `).all(run.pipeline_id, runId).map((row: any) => {
-    const deviationPct = Math.abs((row.current_value - row.baseline_value) / row.baseline_value) * 100;
+    // Handle division by zero: if baseline is 0, deviation is 0% if current is also 0, otherwise infinite (use 100%)
+    let deviationPct: number;
+    if (row.baseline_value === 0) {
+      deviationPct = row.current_value === 0 ? 0 : 100;
+    } else {
+      deviationPct = Math.abs((row.current_value - row.baseline_value) / row.baseline_value) * 100;
+    }
     return {
       key: row.key,
       currentValue: row.current_value,

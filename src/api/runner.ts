@@ -21,6 +21,7 @@ import {
   getPipeline,
   getRepo,
   getSecretsForRepo,
+  compareMetricsToBaselines,
 } from "../db/queries";
 import { updateCommitStatus } from "../lib/github";
 import { getPipelineUrl } from "../lib/utils";
@@ -330,13 +331,33 @@ export async function handleRunComplete(runner: Runner, req: Request): Promise<R
     }
   }
 
+  // Check for baseline regressions after recording metrics
+  const baselineComparisons = compareMetricsToBaselines(body.runId);
+  const regressions = baselineComparisons.filter(c => !c.withinTolerance);
+  const hasRegressions = regressions.length > 0;
+
+  // Log regressions for visibility
+  if (hasRegressions) {
+    console.log(`[Run ${body.runId}] Performance regressions detected:`);
+    for (const r of regressions) {
+      console.log(`  - ${r.key}: ${r.currentValue} (baseline: ${r.baselineValue}, deviation: ${r.deviationPct.toFixed(2)}%, tolerance: ${r.tolerancePct}%)`);
+    }
+  }
+
   // Decrement active jobs
   decrementRunnerActiveJobs(runner.id);
 
   // Mark runner as available (always online after completing a job)
   updateRunnerStatus(runner.id, "online");
 
-  return Response.json({ success: true });
+  return Response.json({
+    success: true,
+    baselineCheck: {
+      checked: baselineComparisons.length,
+      regressions: regressions.length,
+      hasRegressions,
+    },
+  });
 }
 
 export function handleRunnerHeartbeat(runner: Runner): Response {

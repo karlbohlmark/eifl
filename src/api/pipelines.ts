@@ -11,6 +11,11 @@ import {
   createStep,
   getMetrics,
   getMetricHistory,
+  getBaselines,
+  getBaseline,
+  upsertBaseline,
+  deleteBaseline,
+  compareMetricsToBaselines,
   getRepo,
 } from "../db/queries";
 import { getLatestCommit } from "../git/http";
@@ -148,7 +153,12 @@ export function handleGetRun(id: number): Response {
   const metrics = getMetrics(id);
   const pipeline = getPipeline(run.pipeline_id);
 
-  return Response.json({ ...run, steps, metrics, pipeline });
+  // Include baseline comparisons for completed runs
+  const baselineComparisons = run.status === "success" || run.status === "failed"
+    ? compareMetricsToBaselines(id)
+    : [];
+
+  return Response.json({ ...run, steps, metrics, pipeline, baselineComparisons });
 }
 
 export function handleCancelRun(id: number): Response {
@@ -169,4 +179,125 @@ export function handleCancelRun(id: number): Response {
 export function handleGetMetricHistory(pipelineId: number, key: string, limit = 100): Response {
   const history = getMetricHistory(pipelineId, key, limit);
   return Response.json(history);
+}
+
+// Baselines
+export function handleGetBaselines(pipelineId: number): Response {
+  const pipeline = getPipeline(pipelineId);
+  if (!pipeline) {
+    return Response.json({ error: "Pipeline not found" }, { status: 404 });
+  }
+
+  const baselines = getBaselines(pipelineId);
+  return Response.json(baselines);
+}
+
+export function handleGetBaseline(pipelineId: number, key: string): Response {
+  const pipeline = getPipeline(pipelineId);
+  if (!pipeline) {
+    return Response.json({ error: "Pipeline not found" }, { status: 404 });
+  }
+
+  const baseline = getBaseline(pipelineId, key);
+  if (!baseline) {
+    return Response.json({ error: "Baseline not found" }, { status: 404 });
+  }
+
+  return Response.json(baseline);
+}
+
+export async function handleUpsertBaseline(pipelineId: number, req: Request): Promise<Response> {
+  const pipeline = getPipeline(pipelineId);
+  if (!pipeline) {
+    return Response.json({ error: "Pipeline not found" }, { status: 404 });
+  }
+
+  const body = await req.json() as { key: string; baseline_value: number; tolerance_pct?: number };
+
+  if (!body.key || typeof body.key !== "string") {
+    return Response.json({ error: "Key is required" }, { status: 400 });
+  }
+
+  if (typeof body.baseline_value !== "number") {
+    return Response.json({ error: "Baseline value is required and must be a number" }, { status: 400 });
+  }
+
+  const tolerancePct = body.tolerance_pct ?? 10.0;
+  if (typeof tolerancePct !== "number" || tolerancePct < 0) {
+    return Response.json({ error: "Tolerance must be a non-negative number" }, { status: 400 });
+  }
+
+  const baseline = upsertBaseline(pipelineId, body.key, body.baseline_value, tolerancePct);
+  return Response.json(baseline, { status: 201 });
+}
+
+export function handleDeleteBaseline(pipelineId: number, key: string): Response {
+  const pipeline = getPipeline(pipelineId);
+  if (!pipeline) {
+    return Response.json({ error: "Pipeline not found" }, { status: 404 });
+  }
+
+  const success = deleteBaseline(pipelineId, key);
+  if (!success) {
+    return Response.json({ error: "Baseline not found" }, { status: 404 });
+  }
+
+  return new Response(null, { status: 204 });
+}
+
+// Update baselines from a successful run's metrics
+export function handleUpdateBaselinesFromRun(runId: number): Response {
+  const run = getRun(runId);
+  if (!run) {
+    return Response.json({ error: "Run not found" }, { status: 404 });
+  }
+
+  if (run.status !== "success") {
+    return Response.json({ error: "Can only update baselines from successful runs" }, { status: 400 });
+  }
+
+  const metrics = getMetrics(runId);
+  const updated: string[] = [];
+
+  for (const metric of metrics) {
+    // Get existing baseline to preserve tolerance, or use default
+    const existing = getBaseline(run.pipeline_id, metric.key);
+    const tolerance = existing?.tolerance_pct ?? 10.0;
+
+    upsertBaseline(run.pipeline_id, metric.key, metric.value, tolerance);
+    updated.push(metric.key);
+  }
+
+  return Response.json({ updated, count: updated.length });
+}
+
+// Compare a run's metrics against baselines
+export function handleCompareRunToBaselines(runId: number): Response {
+  const run = getRun(runId);
+  if (!run) {
+    return Response.json({ error: "Run not found" }, { status: 404 });
+  }
+
+  const comparisons = compareMetricsToBaselines(runId);
+
+  // Calculate summary
+  const regressions = comparisons.filter(c => !c.withinTolerance);
+  const hasRegressions = regressions.length > 0;
+
+  return Response.json({
+    comparisons,
+    summary: {
+      total: comparisons.length,
+      withinTolerance: comparisons.filter(c => c.withinTolerance).length,
+      regressions: regressions.length,
+      hasRegressions,
+    },
+    regressions: regressions.map(r => ({
+      key: r.key,
+      current: r.currentValue,
+      baseline: r.baselineValue,
+      deviation: `${r.deviationPct.toFixed(2)}%`,
+      tolerance: `${r.tolerancePct}%`,
+    })),
+  });
 }

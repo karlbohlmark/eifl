@@ -32,6 +32,12 @@ import {
   handleGetRun,
   handleCancelRun,
   handleGetMetricHistory,
+  handleGetBaselines,
+  handleGetBaseline,
+  handleUpsertBaseline,
+  handleDeleteBaseline,
+  handleUpdateBaselinesFromRun,
+  handleCompareRunToBaselines,
 } from "./api/pipelines";
 import {
   handleCreateRunner,
@@ -300,6 +306,22 @@ async function handleApiRequest(
     return handleGetMetricHistory(pipelineId, key, limit);
   }
 
+  // Baselines
+  const pipelineBaselinesMatch = path.match(/^pipelines\/(\d+)\/baselines$/);
+  if (pipelineBaselinesMatch) {
+    const pipelineId = parseInt(pipelineBaselinesMatch[1]!);
+    if (method === "GET") return handleGetBaselines(pipelineId);
+    if (method === "POST") return handleUpsertBaseline(pipelineId, req);
+  }
+
+  const pipelineBaselineMatch = path.match(/^pipelines\/(\d+)\/baselines\/(.+)$/);
+  if (pipelineBaselineMatch) {
+    const pipelineId = parseInt(pipelineBaselineMatch[1]!);
+    const key = decodeURIComponent(pipelineBaselineMatch[2]!);
+    if (method === "GET") return handleGetBaseline(pipelineId, key);
+    if (method === "DELETE") return handleDeleteBaseline(pipelineId, key);
+  }
+
   // Runs
   const runMatch = path.match(/^runs\/(\d+)$/);
   if (runMatch && method === "GET") {
@@ -309,6 +331,14 @@ async function handleApiRequest(
   const runCancelMatch = path.match(/^runs\/(\d+)\/cancel$/);
   if (runCancelMatch && method === "POST") {
     return handleCancelRun(parseInt(runCancelMatch[1]!));
+  }
+
+  // Run baseline operations
+  const runBaselinesMatch = path.match(/^runs\/(\d+)\/baselines$/);
+  if (runBaselinesMatch) {
+    const runId = parseInt(runBaselinesMatch[1]!);
+    if (method === "GET") return handleCompareRunToBaselines(runId);
+    if (method === "POST") return handleUpdateBaselinesFromRun(runId);
   }
 
   // Runners (admin)
