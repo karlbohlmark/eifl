@@ -1,4 +1,4 @@
-import { getDb, type Project, type Repo, type Pipeline, type Run, type Step, type Metric, type Runner, type Secret, type RunStatus, type StepStatus, type RunnerStatus, type SecretScope } from "./schema";
+import { getDb, type Project, type Repo, type Pipeline, type Run, type Step, type Metric, type Baseline, type Runner, type Secret, type RunStatus, type StepStatus, type RunnerStatus, type SecretScope } from "./schema";
 
 // Projects
 export function createProject(name: string, description?: string): Project {
@@ -246,6 +246,76 @@ export function getMetricHistory(pipelineId: number, key: string, limit = 100): 
     ORDER BY r.created_at ASC
     LIMIT ?
   `).all(pipelineId, key, limit) as Array<{ run_id: number; value: number; created_at: string; commit_sha: string | null }>;
+}
+
+// Baselines
+export function upsertBaseline(pipelineId: number, key: string, baselineValue: number, tolerancePct = 10.0): Baseline {
+  const db = getDb();
+  const stmt = db.prepare(`
+    INSERT INTO baselines (pipeline_id, key, baseline_value, tolerance_pct)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(pipeline_id, key) DO UPDATE SET
+      baseline_value = excluded.baseline_value,
+      tolerance_pct = excluded.tolerance_pct,
+      updated_at = datetime('now') || 'Z'
+    RETURNING *
+  `);
+  return stmt.get(pipelineId, key, baselineValue, tolerancePct) as Baseline;
+}
+
+export function getBaseline(pipelineId: number, key: string): Baseline | null {
+  const db = getDb();
+  return db.query("SELECT * FROM baselines WHERE pipeline_id = ? AND key = ?").get(pipelineId, key) as Baseline | null;
+}
+
+export function getBaselines(pipelineId: number): Baseline[] {
+  const db = getDb();
+  return db.query("SELECT * FROM baselines WHERE pipeline_id = ? ORDER BY key").all(pipelineId) as Baseline[];
+}
+
+export function deleteBaseline(pipelineId: number, key: string): boolean {
+  const db = getDb();
+  const result = db.run("DELETE FROM baselines WHERE pipeline_id = ? AND key = ?", [pipelineId, key]);
+  return result.changes > 0;
+}
+
+export interface BaselineComparison {
+  key: string;
+  currentValue: number;
+  baselineValue: number;
+  tolerancePct: number;
+  deviationPct: number;
+  withinTolerance: boolean;
+}
+
+export function compareMetricsToBaselines(runId: number): BaselineComparison[] {
+  const db = getDb();
+  // Get the pipeline_id for this run
+  const run = db.query("SELECT pipeline_id FROM runs WHERE id = ?").get(runId) as { pipeline_id: number } | null;
+  if (!run) return [];
+
+  // Get all metrics for this run that have baselines
+  return db.query(`
+    SELECT
+      m.key,
+      m.value as current_value,
+      b.baseline_value,
+      b.tolerance_pct
+    FROM metrics m
+    JOIN baselines b ON b.pipeline_id = ? AND b.key = m.key
+    WHERE m.run_id = ?
+    ORDER BY m.key
+  `).all(run.pipeline_id, runId).map((row: any) => {
+    const deviationPct = Math.abs((row.current_value - row.baseline_value) / row.baseline_value) * 100;
+    return {
+      key: row.key,
+      currentValue: row.current_value,
+      baselineValue: row.baseline_value,
+      tolerancePct: row.tolerance_pct,
+      deviationPct,
+      withinTolerance: deviationPct <= row.tolerance_pct
+    };
+  }) as BaselineComparison[];
 }
 
 // Runners

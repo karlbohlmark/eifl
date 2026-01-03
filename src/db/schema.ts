@@ -90,6 +90,16 @@ function initSchema(db: Database) {
       created_at TEXT DEFAULT (datetime('now') || 'Z')
     );
 
+    CREATE TABLE IF NOT EXISTS baselines (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      pipeline_id INTEGER NOT NULL REFERENCES pipelines(id) ON DELETE CASCADE,
+      key TEXT NOT NULL,
+      baseline_value REAL NOT NULL,
+      tolerance_pct REAL DEFAULT 10.0,
+      updated_at TEXT DEFAULT (datetime('now') || 'Z'),
+      UNIQUE(pipeline_id, key)
+    );
+
     CREATE TABLE IF NOT EXISTS runners (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL UNIQUE,
@@ -124,6 +134,8 @@ function initSchema(db: Database) {
     CREATE INDEX IF NOT EXISTS idx_steps_run ON steps(run_id);
     CREATE INDEX IF NOT EXISTS idx_metrics_run ON metrics(run_id);
     CREATE INDEX IF NOT EXISTS idx_metrics_key ON metrics(key);
+    CREATE INDEX IF NOT EXISTS idx_baselines_pipeline ON baselines(pipeline_id);
+    CREATE INDEX IF NOT EXISTS idx_baselines_key ON baselines(key);
     CREATE INDEX IF NOT EXISTS idx_secrets_scope ON secrets(scope, scope_id);
   `);
 
@@ -236,6 +248,15 @@ export interface Metric {
   value: number;
   unit: string | null;
   created_at: string;
+}
+
+export interface Baseline {
+  id: number;
+  pipeline_id: number;
+  key: string;
+  baseline_value: number;
+  tolerance_pct: number;
+  updated_at: string;
 }
 
 export type RunnerStatus = "online" | "offline" | "busy";
