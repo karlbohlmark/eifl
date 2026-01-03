@@ -102,7 +102,7 @@ export async function handleTriggerPipeline(
     return Response.json({ error: "Repository not found" }, { status: 404 });
   }
 
-  const body = (await req.json().catch(() => ({}))) as { branch?: string; commit?: string };
+  const body = (await req.json().catch(() => ({}))) as { branch?: string; commit?: string; trigger_type?: string };
   const branch = body.branch || repo.default_branch;
   let commitSha = body.commit;
 
@@ -110,7 +110,13 @@ export async function handleTriggerPipeline(
     commitSha = await getLatestCommit(repo.path, branch) ?? undefined;
   }
 
-  const run = createRun(id, commitSha, branch, "manual");
+  // Allow specifying trigger type for testing scheduled/push behavior
+  const validTriggerTypes = ["manual", "schedule", "push"];
+  const triggerType = body.trigger_type && validTriggerTypes.includes(body.trigger_type)
+    ? body.trigger_type
+    : "manual";
+
+  const run = createRun(id, commitSha, branch, triggerType);
 
   // Create steps from pipeline config
   const config = JSON.parse(pipeline.config) as PipelineConfig;

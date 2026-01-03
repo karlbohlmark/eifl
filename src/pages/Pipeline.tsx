@@ -10,16 +10,20 @@ import {
   Clock,
   Loader2,
   BarChart3,
+  ChevronDown,
+  Calendar,
+  GitBranch,
+  Hand,
 } from "lucide-react";
 import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { formatRelativeTime } from "../lib/utils";
+import { groupMetrics, type HistoryPoint } from "@/lib/metrics";
+import { MetricGroupCard } from "@/components/MetricGroup";
 
 interface Pipeline {
   id: number;
@@ -34,6 +38,7 @@ interface Run {
   status: "pending" | "running" | "success" | "failed" | "cancelled";
   commit_sha: string | null;
   branch: string | null;
+  triggered_by: "manual" | "schedule" | "push" | null;
   started_at: string | null;
   finished_at: string | null;
   created_at: string;
@@ -75,7 +80,7 @@ export function PipelineView() {
   const [runs, setRuns] = useState<Run[]>([]);
   const [selectedRun, setSelectedRun] = useState<RunDetails | null>(null);
   const [metricHistory, setMetricHistory] = useState<
-    Record<string, Array<{ value: number; created_at: string }>>
+    Record<string, HistoryPoint[]>
   >({});
   const [loading, setLoading] = useState(true);
   const [showMetrics, setShowMetrics] = useState(true);
@@ -95,6 +100,21 @@ export function PipelineView() {
       return () => clearInterval(interval);
     }
   }, [selectedRun?.id, selectedRun?.status]);
+
+  // Pre-fetch metric histories when a run is selected
+  useEffect(() => {
+    if (selectedRun?.metrics) {
+      const metricsToFetch = selectedRun.metrics
+        .filter((m) => !m.key.startsWith("step."))
+        .slice(0, 9); // Pre-fetch first 9 metrics (visible in 3x3 grid)
+
+      for (const metric of metricsToFetch) {
+        if (!metricHistory[metric.key]) {
+          fetchMetricHistory(metric.key);
+        }
+      }
+    }
+  }, [selectedRun?.id]);
 
   async function fetchPipeline() {
     try {
@@ -150,10 +170,12 @@ export function PipelineView() {
     }
   }
 
-  async function triggerPipeline() {
+  async function triggerPipeline(triggerType: "manual" | "schedule" | "push" = "manual") {
     try {
       const res = await fetch(`/api/pipelines/${id}/trigger`, {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ trigger_type: triggerType }),
       });
       if (res.ok) {
         const run = await res.json();
@@ -225,10 +247,26 @@ export function PipelineView() {
             <BarChart3 className="w-4 h-4 mr-2" />
             Metrics
           </Button>
-          <Button onClick={triggerPipeline}>
-            <Play className="w-4 h-4 mr-2" />
-            Run Pipeline
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button>
+                <Play className="w-4 h-4 mr-2" />
+                Run Pipeline
+                <ChevronDown className="w-4 h-4 ml-2" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => triggerPipeline("manual")}>
+                Run as manual
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => triggerPipeline("schedule")}>
+                Run as scheduled
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => triggerPipeline("push")}>
+                Run as push
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -237,49 +275,15 @@ export function PipelineView() {
           <CardHeader>
             <CardTitle>Metrics</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 md:grid-cols-2">
-              {selectedRun.metrics
-                .filter((m) => !m.key.startsWith("step."))
-                .map((metric) => (
-                  <div
-                    key={metric.key}
-                    className="p-4 rounded-lg bg-muted"
-                    onClick={() => fetchMetricHistory(metric.key)}
-                  >
-                    <p className="text-sm text-muted-foreground">{metric.key}</p>
-                    <p className="text-2xl font-bold">
-                      {metric.key.includes("duration")
-                        ? `${(metric.value / 1000).toFixed(2)}s`
-                        : metric.key.includes("size")
-                        ? `${(metric.value / 1024).toFixed(2)} KB`
-                        : metric.value}
-                    </p>
-                    {metricHistory[metric.key] && (
-                      <div className="mt-4 h-32">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <LineChart data={metricHistory[metric.key]}>
-                            <XAxis
-                              dataKey="created_at"
-                              tick={false}
-                              axisLine={false}
-                            />
-                            <YAxis hide />
-                            <Tooltip />
-                            <Line
-                              type="monotone"
-                              dataKey="value"
-                              stroke="#3b82f6"
-                              strokeWidth={2}
-                              dot={false}
-                            />
-                          </LineChart>
-                        </ResponsiveContainer>
-                      </div>
-                    )}
-                  </div>
-                ))}
-            </div>
+          <CardContent className="space-y-4">
+            {groupMetrics(selectedRun.metrics).map((group) => (
+              <MetricGroupCard
+                key={group.id}
+                group={group}
+                metricHistories={metricHistory}
+                onFetchHistory={fetchMetricHistory}
+              />
+            ))}
           </CardContent>
         </Card>
       )}
@@ -312,6 +316,15 @@ export function PipelineView() {
                         {run.commit_sha && ` @ ${run.commit_sha.slice(0, 8)}`}
                       </p>
                     </div>
+                    {run.triggered_by === "schedule" && (
+                      <Calendar className="w-3.5 h-3.5 text-muted-foreground" title="Scheduled" />
+                    )}
+                    {run.triggered_by === "push" && (
+                      <GitBranch className="w-3.5 h-3.5 text-muted-foreground" title="Push" />
+                    )}
+                    {run.triggered_by === "manual" && (
+                      <Hand className="w-3.5 h-3.5 text-muted-foreground" title="Manual" />
+                    )}
                   </button>
                 ))
               )}
