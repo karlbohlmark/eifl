@@ -1,0 +1,6 @@
+# Backblaze B2 Configuration for EIFL Backups
+export B2_BUCKET="eifl-backups"
+export B2_ENDPOINT="https://s3.us-west-004.backblazeb2.com"
+export B2_KEY_ID="b78587452c77"
+export B2_APP_KEY="0035bc1205ca640ebec3952c53892b37357328d390"
+export PATH="/usr/local/bin:/usr/bin:/bin"
